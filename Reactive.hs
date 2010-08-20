@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, FlexibleInstances, FunctionalDependencies, OverloadedStrings, TypeSynonymInstances #-}
+{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, FlexibleInstances, FunctionalDependencies, OverloadedStrings, TypeSynonymInstances, NoMonomorphismRestriction #-}
 
 module Reactive where
 
@@ -12,33 +12,11 @@ import Data.String
 
 data Attribute = AttrVal String String
                | AttrBool String
+               | forall a. JSValue a => EventCall String (Event a) (Behaviour a)
 
-{-
-data Func a b = Func (a -> b) String
+class Attributable b where
+        (!) :: b -> Attribute -> b
 
-data WebBehaviour a = WebBehaviour [WebBehaviour' a]
-
-data WebBehaviour' a = Tag String [Attribute] (WebBehaviour a)
-                     | Text String
-                     | Value a
-                     -- | SrvVal String
-                     | forall b. Trans (Func b a) (WebBehaviour b)
-                     | forall b. Bind (Func b (WebBehaviour a)) (WebBehaviour b)
-
-data SrvVal a = SrvVal String
-
-srvval name = WebBehaviour [Value $ SrvVal name]
-
-instance Monad WebBehaviour where
-        return x = WebBehaviour [Value x]
-        (Tag tag attrs xs) >>= f  =  Tag tag attrs $ map (>>=f) xs
-        (Text text) >>= _  =  Text text
-        (Value x) >>= f  =  f x
-        wb >>= f = Bind (Func f undefined) wb
-
-
-container tag (WebBehaviour bs) = WebBehaviour [Tag tag [] bs]
--}
 
 class JSFunc f a b | f -> a b where
         jsFunc :: f -> RenderMonad String
@@ -69,8 +47,6 @@ instance (JSValue a) => JSValue (Behaviour a) where
                 return $ func++"(" ++ param ++ ")"
 
 
-data EventDesc = forall a. JSValue a => EventDesc String (Behaviour a)
-
 data Event a = Event Int
 
 data HtmlEvent = OnClick
@@ -79,34 +55,64 @@ data HtmlEvent = OnClick
 data Push = forall a. (JSValue a) => Push String (Event a)
 
 
-data HtmlState { hsUniq :: Int, hsPushes :: [Push] }
+data HtmlState = HtmlState { hsUniq :: Int, hsPushes :: [Push] }
 
-data HtmlM' a = Tag String [Attribute] [(HtmlEvent, EventDesc)] (HtmlM a)
-              | Text String
-              | Behaviour (Behaviour Html)
-              | Placeholder Int
-              | HtmlReturn a
+data HtmlStructure = Tag String [Attribute] [HtmlStructure]
+                   | Text String
+                   | Behaviour (Behaviour Html)
+                   | Placeholder Int [Attribute]
 
-data HtmlM a = HtmlM [HtmlM' a]
+data HtmlM a = HtmlM (HtmlState -> (a, ([HtmlStructure], HtmlState)))
 
-type Html = StateT Int HtmlM ()
+type Html = HtmlM ()
 
 
 
 instance Monad HtmlM where
-        return = HtmlM . (:[]) . HtmlReturn
-        (HtmlM [HtmlReturn a]) >>= f = f a
-        (HtmlM xs) >>= f = let (HtmlM ys) = f undefined in HtmlM (convert xs ++ ys)
-                where convert (Tag name attrs events (HtmlM content) : rest) = Tag name attrs events (HtmlM $ convert content) : convert rest
-                      convert (Text text : rest) = Text text : convert rest
-                      convert (Behaviour b : rest) = Behaviour b : convert rest
-                      convert (Placeholder p : rest) = Placeholder p : convert rest
-                      convert (HtmlReturn _ : rest) = convert rest
-                      convert [] = []
+        return x = HtmlM $ \s -> (x, ([], s))
+        (HtmlM f) >>= g = HtmlM $ \s -> let (x, (cs, s')) = f s
+                                            (HtmlM g') = g x
+                                            (y, (ds, s'')) = g' s'
+                                         in (y, (cs++ds, s''))
+
+instance MonadState HtmlState HtmlM where
+        get = HtmlM $ \s -> (s, ([], s))
+        put s = HtmlM $ \_ -> ((), ([], s))
 
 
 instance IsString Html where
-        fromString text = StateT $ \s -> (HtmlM [Text text], s)
+        fromString text = HtmlM $ \s -> ((), ([Text text], s))
+
+
+instance Attributable (HtmlM a) where
+        (HtmlM f) ! a = HtmlM $ \s -> let (x, (cs, s')) = f s
+                                       in (x, (map (addAttr a) cs, s'))
+
+instance Attributable (HtmlM a -> HtmlM a) where
+        f ! a = \html -> HtmlM $ \s -> let (HtmlM g) = f html
+                                           (x, (t, s')) = g s
+                                        in (x, (map (addAttr a) t, s'))
+
+
+addAttr :: Attribute -> HtmlStructure -> HtmlStructure
+addAttr a (Tag name as content) = Tag name (a:as) content
+addAttr _ t@(Text _) = t
+addAttr a (Behaviour b) = Behaviour $ Func (AddAttr a) b
+addAttr a (Placeholder p as) = Placeholder p (a:as)
+
+data AddAttr = AddAttr Attribute
+instance JSFunc AddAttr Html Html where
+        jsFunc (AddAttr (AttrVal name val)) = renderPutJS $ "return param.attr("++show name++", "++show val++")"
+        jsFunc (AddAttr (AttrBool name)) = renderPutJS $ "return param.attr("++show name++", true)"
+        jsFunc (AddAttr (EventCall ('o':'n':name) (Event e) val)) = do
+                jsval <- jsValue val
+                renderPutJS $ "return param."++name++"(function() { call_event("++show e++", "++jsval++"); });"
+
+
+
+mkEvent :: (JSValue a) => HtmlM (Event a)
+mkEvent = return.Event =<< htmlUniq
+
 
 
 
@@ -114,7 +120,8 @@ instance IsString Html where
 
 
 container :: String -> Html -> Html
-container tag content = HtmlM [Tag tag [] [] content]
+container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
+                                         in ((), ([Tag tag [] content], s'))
 
 
 
@@ -124,6 +131,12 @@ title = container "title"
 body = container "body"
 ul = container "ul"
 li = container "li"
+script = container "script"
+
+type_ = AttrVal "type"
+src = AttrVal "src"
+
+onclick = EventCall "onclick"
 
 
 data StringToHtml = StringToHtml String
@@ -132,9 +145,9 @@ instance JSFunc StringToHtml String Html where
 
 instance JSFunc (Html -> Html) Html Html where
         jsFunc f = do
-                pl <- renderGetID
-                val <- jsValue . f $ HtmlM [Placeholder pl]
-                renderPutJS $ "var result = "++val++"; result.find('div[placeholder-id="++show pl++"]').replaceWith(param); return result;"
+                pl <- renderUniq
+                val <- jsValue . f $ HtmlM $ \s -> ((), ([Placeholder pl []], s))
+                renderPutJS $ "var result = "++val++".clone(); result.find('div[placeholder-id="++show pl++"]').replaceWith(param); return result;"
 
 
 data ToHtmlInt = ToHtmlInt
@@ -147,10 +160,10 @@ msg2li = li . fromString
 
 
 jquery :: Html
-jquery = HtmlM [Tag "script" [AttrVal "type" "text/javascript", AttrVal "src" "jquery.js"] [] (HtmlM [Text ""])]
+jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
 
 jsinit :: Html
-jsinit = HtmlM [Tag "script" [AttrVal "type" "text/javascript"] [] $ HtmlM [Text "\
+jsinit = script ! type_ "text/javascript" $ "\
 		\$(document).ready(function() {\
 		\  $('div.behaviour-placeholder').each(function() {\
 		\    var expr = $(this).attr('expr');\
@@ -158,7 +171,6 @@ jsinit = HtmlM [Tag "script" [AttrVal "type" "text/javascript"] [] $ HtmlM [Text
 		\  });\
 		\});\
                 \ "
-        ]]
 
 
 page = html $ do
@@ -171,7 +183,7 @@ page = html $ do
                         let msgs = SrvVal "msgs" :: Behaviour [String]
                         let count = Value 20 :: Behaviour Int
                         let x = Func li $ Func ToHtmlInt count :: Behaviour Html
-                        HtmlM [Behaviour x]
+                        HtmlM $ \s -> ((), ([Behaviour x], s))
                         li $ "polozka"
 
 
@@ -182,13 +194,12 @@ type RenderMonad a = StateT RenderState (Writer String) a
 
 
 render :: Html -> String
-render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' xs) (RenderState 1 "")
-        where render' :: HtmlM' () -> RenderMonad ()
+render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "")
+        where render' :: HtmlStructure -> RenderMonad ()
 
-              render' (Tag tag attrs events (HtmlM xs)) = do
+              render' (Tag tag attrs xs) = do
                       tell $ "<" ++ tag 
                       renderAttrs attrs
-                      renderEvents events
                       tell ">\n"
                       mapM render' xs
                       tell $ "</" ++ tag ++ ">\n"
@@ -198,17 +209,26 @@ render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' xs) (RenderState 
                       val <- jsValue b
                       tell $ "<div class=\"behaviour-placeholder\" expr=\""++val++"\"></div>\n"
                       gets (not.null.rsJavascript) >>= flip when renderJavascript
-              render' (Placeholder p) = tell $ "<div placeholder-id=\""++show p++"\"></div>\n"
+              render' (Placeholder p attrs) = do
+                      tell $ "<div placeholder-id=\""++show p++"\""
+                      renderAttrs attrs
+                      tell "></div>\n"
 
               renderAttrs [] = return ()
               renderAttrs ((AttrBool name) : rest) = tell (' ':name) >> renderAttrs rest
               renderAttrs ((AttrVal name val) : rest) = tell (" "++name++"=\""++val++"\"") >> renderAttrs rest
+              renderAttrs ((EventCall name (Event id) value) : rest) = do
+                      param <- jsValue value
+                      tell $ " "++name++"=\"run_event("++show id++","++param++")\""
+                      renderAttrs rest
 
+{-
               renderEvents [] = return ()
               renderEvents ((OnClick, EventDesc name value) : rest) = do
                       param <- jsValue value
                       tell $ " onclick=\"run_event('"++name++"',"++param++")\""
                       renderEvents rest
+                      -}
 
               renderJavascript = do
                       tell "<script type=\"text/javascript\">\n"
@@ -216,11 +236,15 @@ render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' xs) (RenderState 
                       tell "</script>\n"
 
 
-renderGetID :: RenderMonad Int
-renderGetID = do { x <- gets rsUniq; modify $ \s -> s { rsUniq = x+1 }; return x }
+
+htmlUniq :: HtmlM Int
+htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
+
+renderUniq :: RenderMonad Int
+renderUniq = do { x <- gets rsUniq; modify $ \s -> s { rsUniq = x+1 }; return x }
 
 renderPutJS :: String -> RenderMonad String
 renderPutJS impl = do
-        name <- return.("func_"++).show =<< renderGetID
+        name <- return.("func_"++).show =<< renderUniq
         modify $ \s -> s { rsJavascript = rsJavascript s ++ "function "++name++"(param) {"++impl++"}\n" }
         return name
