@@ -35,3 +35,9 @@ function r_bhv_init(id, rdep) {
 function call_event(id, value) {
 
 }
+
+function r_toHtmlHtmlList(param) {
+        var result = $('<div></div>');
+        for (i in param) result.append(param[i].clone());
+        return result.children();
+}

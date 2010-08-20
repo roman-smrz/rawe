@@ -25,10 +25,18 @@ class JSFunc f a b | f -> a b where
 
 class JSValue a where
         jsValue :: a -> RenderMonad String
+        jsValueList :: [a] -> RenderMonad String
+        jsValueList = return.("["++).(++"]").tail.concat <=< mapM (return.(',':) <=< jsValue)
+
+instance (JSValue a) => JSValue [a] where
+        jsValue = jsValueList
 
 instance JSValue Int where jsValue = return.show
-instance JSValue String where jsValue = return.show
 instance JSValue Html where jsValue html = return $ "$('"++escapeStringJS(render html)++"')"
+
+instance JSValue Char where
+        jsValue = return.show
+        jsValueList = return.show
 
 escapeStringJS = (>>=helper)
         where helper '\n' = "\\n"
@@ -166,13 +174,26 @@ data ToHtmlInt = ToHtmlInt
 instance JSFunc ToHtmlInt Int Html where
         jsFunc f = renderPutJSFun $ "return $('<span>'+param+'</span>');"
 
-data ToHtmlString = ToHtmlString String
+data ToHtmlString = ToHtmlString
 instance JSFunc ToHtmlString String Html where
         jsFunc f = renderPutJSFun $ "return $('<span>'+param+'</span>');"
+
+data ToHtmlHtmlList = ToHtmlHtmlList
+instance JSFunc ToHtmlHtmlList [Html] Html where
+        jsFunc f = return "r_toHtmlHtmlList"
 
 
 msg2li :: String -> Html
 msg2li = li . fromString
+
+data Map a b = forall f. (JSValue a, JSValue b, JSFunc f a b) => Map f
+instance JSFunc (Map a b) [a] [b] where
+        jsFunc (Map f) = do
+                jsf <- jsFunc f
+                renderPutJSFun $ "var result = []; for (var i in param) result[i] = "++jsf++"(param[i]); return result; "
+
+bmap :: (JSValue a, JSValue b, JSFunc f a b) => f -> Behaviour [a] -> Behaviour [b]
+bmap f = Func (Map f)
 
 
 
@@ -180,6 +201,7 @@ jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
 reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
 jsinit = script ! type_ "text/javascript" $ "r_init();"
 
+bhv x = HtmlM $ \s -> ((), ([Behaviour x], s))
 
 page = html $ do
         head $ do
@@ -188,11 +210,15 @@ page = html $ do
         body $ do
                 jsinit
                 ul $ do
-                        let msgs = SrvVal "msgs" :: Behaviour [String]
+                        --let msgs = SrvVal "msgs" :: Behaviour [String]
+                        let msg = Value "prvni" :: Behaviour String
+                        let msgs = Value ["druha", "treti", "ctvrta"] :: Behaviour [String]
                         let count = Value 20 :: Behaviour Int
-                        let x = Func li $ Func ToHtmlInt count :: Behaviour Html
-                        HtmlM $ \s -> ((), ([Behaviour x], s))
+
                         li $ "polozka"
+                        bhv $ Func li $ Func ToHtmlInt count
+                        bhv $ Func li $ Func ToHtmlString msg
+                        bhv $ Func ToHtmlHtmlList $ bmap li $ bmap ToHtmlString msgs
 
 
 
@@ -232,6 +258,7 @@ render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs 
                       tell "<script type=\"text/javascript\">\n"
                       tell =<< gets rsJavascript
                       tell "</script>\n"
+                      modify $ \s -> s { rsJavascript = [] }
 
 
 
