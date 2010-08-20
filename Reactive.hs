@@ -1,4 +1,6 @@
-{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses, FlexibleInstances, FunctionalDependencies, OverloadedStrings, TypeSynonymInstances, NoMonomorphismRestriction #-}
+{-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses,
+  FlexibleInstances, FunctionalDependencies, OverloadedStrings,
+  TypeSynonymInstances, NoMonomorphismRestriction #-}
 
 module Reactive where
 
@@ -33,18 +35,32 @@ escapeStringJS = (>>=helper)
               helper c | c `elem` "'\"\\" = '\\':c:[]
                        | otherwise        = [c]
 
+escapeStringHtml = (>>=helper)
+        where helper '"' = "&quot;"
+              helper '&' = "&amp;"
+              helper '<' = "&lt;"
+              helper '>' = "&gt;"
+              helper c = [c]
+
 
 data Behaviour a = Value a
                  | SrvVal String
                  | forall b f. (JSValue b, JSFunc f b a) => Func f (Behaviour b)
 
 instance (JSValue a) => JSValue (Behaviour a) where
-        jsValue (Value x) = jsValue x
-        jsValue (SrvVal name) = return $ "srv_val('"++name++"')"
-        jsValue (Func f b) = do
-                func <- jsFunc f
-                param <- jsValue b
-                return $ func++"(" ++ param ++ ")"
+        jsValue bhv = do
+                id <- renderUniq
+                val <- case bhv of (Value x) -> jsValue x
+                                   (SrvVal name) -> do
+                                           renderPutJS $ "r_bhv_srv["++show id++"] = "++show name++";"
+                                           return $ "srv_val('"++name++"')"
+                                   (Func f b) -> do
+                                           func <- jsFunc f
+                                           id' <- jsValue b
+                                           renderPutJS $ "r_bhv_deps["++show id++"] = ["++id'++"];"
+                                           return $ func++"(r_bhv_val[" ++ id' ++ "])"
+                renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++val++"; };"
+                return $ show id
 
 
 data Event a = Event Int
@@ -102,11 +118,11 @@ addAttr a (Placeholder p as) = Placeholder p (a:as)
 
 data AddAttr = AddAttr Attribute
 instance JSFunc AddAttr Html Html where
-        jsFunc (AddAttr (AttrVal name val)) = renderPutJS $ "return param.attr("++show name++", "++show val++")"
-        jsFunc (AddAttr (AttrBool name)) = renderPutJS $ "return param.attr("++show name++", true)"
+        jsFunc (AddAttr (AttrVal name val)) = renderPutJSFun $ "return param.attr("++show name++", "++show val++")"
+        jsFunc (AddAttr (AttrBool name)) = renderPutJSFun $ "return param.attr("++show name++", true)"
         jsFunc (AddAttr (EventCall ('o':'n':name) (Event e) val)) = do
                 jsval <- jsValue val
-                renderPutJS $ "return param."++name++"(function() { call_event("++show e++", "++jsval++"); });"
+                renderPutJSFun $ "return param."++name++"(function() { call_event("++show e++", "++jsval++"); });"
 
 
 
@@ -139,44 +155,36 @@ src = AttrVal "src"
 onclick = EventCall "onclick"
 
 
-data StringToHtml = StringToHtml String
-instance JSFunc StringToHtml String Html where
-        jsFunc (StringToHtml text) = error "StringToHtml: not implemented"
-
 instance JSFunc (Html -> Html) Html Html where
         jsFunc f = do
                 pl <- renderUniq
                 val <- jsValue . f $ HtmlM $ \s -> ((), ([Placeholder pl []], s))
-                renderPutJS $ "var result = "++val++".clone(); result.find('div[placeholder-id="++show pl++"]').replaceWith(param); return result;"
+                renderPutJSFun $ "var result = "++val++".clone(); result.find('div[placeholder-id="++show pl++"]').replaceWith(param); return result;"
 
 
 data ToHtmlInt = ToHtmlInt
 instance JSFunc ToHtmlInt Int Html where
-        jsFunc f = renderPutJS $ "return $('<span>'+param+'</span>');"
+        jsFunc f = renderPutJSFun $ "return $('<span>'+param+'</span>');"
+
+data ToHtmlString = ToHtmlString String
+instance JSFunc ToHtmlString String Html where
+        jsFunc f = renderPutJSFun $ "return $('<span>'+param+'</span>');"
+
 
 msg2li :: String -> Html
 msg2li = li . fromString
 
 
 
-jquery :: Html
 jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
-
-jsinit :: Html
-jsinit = script ! type_ "text/javascript" $ "\
-		\$(document).ready(function() {\
-		\  $('div.behaviour-placeholder').each(function() {\
-		\    var expr = $(this).attr('expr');\
-		\    $(this).replaceWith(eval(expr));\
-		\  });\
-		\});\
-                \ "
+reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
+jsinit = script ! type_ "text/javascript" $ "r_init();"
 
 
 page = html $ do
         head $ do
                 title "Catopsis"
-                jquery
+                jquery; reactive
         body $ do
                 jsinit
                 ul $ do
@@ -199,36 +207,26 @@ render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs 
 
               render' (Tag tag attrs xs) = do
                       tell $ "<" ++ tag 
-                      renderAttrs attrs
+                      mapM_ renderAttrs attrs
                       tell ">\n"
                       mapM render' xs
                       tell $ "</" ++ tag ++ ">\n"
 
               render' (Text text) = tell text
               render' (Behaviour b) = do
-                      val <- jsValue b
-                      tell $ "<div class=\"behaviour-placeholder\" expr=\""++val++"\"></div>\n"
+                      id <- jsValue b
+                      tell $ "<div class=\"bhv-placeholder\" bhv-id="++show id++"></div>\n"
                       gets (not.null.rsJavascript) >>= flip when renderJavascript
               render' (Placeholder p attrs) = do
                       tell $ "<div placeholder-id=\""++show p++"\""
-                      renderAttrs attrs
+                      mapM_ renderAttrs attrs
                       tell "></div>\n"
 
-              renderAttrs [] = return ()
-              renderAttrs ((AttrBool name) : rest) = tell (' ':name) >> renderAttrs rest
-              renderAttrs ((AttrVal name val) : rest) = tell (" "++name++"=\""++val++"\"") >> renderAttrs rest
-              renderAttrs ((EventCall name (Event id) value) : rest) = do
+              renderAttrs (AttrBool name) = tell $ ' ':name
+              renderAttrs (AttrVal name val) = tell $ " "++name++"=\""++escapeStringHtml val++"\""
+              renderAttrs (EventCall name (Event id) value) = do
                       param <- jsValue value
-                      tell $ " "++name++"=\"run_event("++show id++","++param++")\""
-                      renderAttrs rest
-
-{-
-              renderEvents [] = return ()
-              renderEvents ((OnClick, EventDesc name value) : rest) = do
-                      param <- jsValue value
-                      tell $ " onclick=\"run_event('"++name++"',"++param++")\""
-                      renderEvents rest
-                      -}
+                      tell $ " "++name++"=\"call_event("++show id++","++param++")\""
 
               renderJavascript = do
                       tell "<script type=\"text/javascript\">\n"
@@ -243,8 +241,12 @@ htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
 renderUniq :: RenderMonad Int
 renderUniq = do { x <- gets rsUniq; modify $ \s -> s { rsUniq = x+1 }; return x }
 
-renderPutJS :: String -> RenderMonad String
-renderPutJS impl = do
+renderPutJS :: String -> RenderMonad ()
+renderPutJS code = modify $ \s -> s { rsJavascript = rsJavascript s ++ code ++ "\n" }
+
+
+renderPutJSFun :: String -> RenderMonad String
+renderPutJSFun impl = do
         name <- return.("func_"++).show =<< renderUniq
-        modify $ \s -> s { rsJavascript = rsJavascript s ++ "function "++name++"(param) {"++impl++"}\n" }
+        renderPutJS $ "function "++name++"(param) {"++impl++"}"
         return name
