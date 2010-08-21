@@ -58,16 +58,20 @@ data Behaviour a = Value a
 instance (JSValue a) => JSValue (Behaviour a) where
         jsValue bhv = do
                 id <- renderUniq
-                val <- case bhv of (Value x) -> jsValue x
-                                   (SrvVal name) -> do
-                                           renderPutJS $ "r_bhv_srv["++show id++"] = "++show name++";"
-                                           return $ "srv_val('"++name++"')"
-                                   (Func f b) -> do
-                                           func <- jsFunc f
-                                           id' <- jsValue b
-                                           renderPutJS $ "r_bhv_deps["++show id++"] = ["++id'++"];"
-                                           return $ func++"(r_bhv_val[" ++ id' ++ "])"
-                renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++val++"; };"
+                case bhv of
+                     (Value x) -> do
+                             val <- jsValue x
+                             renderPutJS $ "r_bhv_val["++show id++"] = "++val++";"
+
+                     (SrvVal name) -> do
+                             renderPutJS $ "r_bhv_srv["++show id++"] = "++show name++";"
+
+                     (Func f b) -> do
+                             func <- jsFunc f
+                             id' <- jsValue b
+                             renderPutJS $ "r_bhv_deps["++show id++"] = ["++id'++"];"
+                             renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++func++"(r_bhv_val["++id'++"]); };"
+
                 return $ show id
 
 
@@ -210,10 +214,9 @@ page = html $ do
         body $ do
                 jsinit
                 ul $ do
-                        --let msgs = SrvVal "msgs" :: Behaviour [String]
-                        let msg = Value "prvni" :: Behaviour String
-                        let msgs = Value ["druha", "treti", "ctvrta"] :: Behaviour [String]
-                        let count = Value 20 :: Behaviour Int
+                        let count = SrvVal "count" :: Behaviour Int
+                        let msg = SrvVal "msg" :: Behaviour String
+                        let msgs = SrvVal "msgs" :: Behaviour [String]
 
                         li $ "polozka"
                         bhv $ Func li $ Func ToHtmlInt count
@@ -241,7 +244,7 @@ render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs 
               render' (Text text) = tell text
               render' (Behaviour b) = do
                       id <- jsValue b
-                      tell $ "<div class=\"bhv-placeholder\" bhv-id="++show id++"></div>\n"
+                      tell $ "<div bhv-id="++show id++"></div>\n"
                       gets (not.null.rsJavascript) >>= flip when renderJavascript
               render' (Placeholder p attrs) = do
                       tell $ "<div placeholder-id=\""++show p++"\""
