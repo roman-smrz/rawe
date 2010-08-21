@@ -1,10 +1,11 @@
 {-# LANGUAGE ExistentialQuantification, MultiParamTypeClasses,
-  FlexibleInstances, FunctionalDependencies, OverloadedStrings,
+  FlexibleInstances, FlexibleContexts,
+  FunctionalDependencies, OverloadedStrings,
   TypeSynonymInstances, NoMonomorphismRestriction #-}
 
 module Reactive where
 
-import Prelude hiding (head)
+import Prelude hiding (head,div)
 
 import Control.Monad.State
 import Control.Monad.Writer
@@ -38,6 +39,12 @@ instance JSValue Char where
         jsValue = return.show
         jsValueList = return.show
 
+instance (JSValue a, JSValue b) => JSValue (a, b) where
+        jsValue (x,y) = do
+                x' <- jsValue x; y' <- jsValue y
+                return $ "["++x'++", "++y'++"]"
+
+
 escapeStringJS = (>>=helper)
         where helper '\n' = "\\n"
               helper c | c `elem` "'\"\\" = '\\':c:[]
@@ -54,25 +61,43 @@ escapeStringHtml = (>>=helper)
 data Behaviour a = Value a
                  | SrvVal String
                  | forall b f. (JSValue b, JSFunc f b a) => Func f (Behaviour b)
+                 | forall b c f. (JSValue b, JSValue c, JSFunc f (b,c) a) => Func2 f (Behaviour b) (Behaviour c)
+
+data BhvCacheKey = forall a.  BhvCacheKey (Behaviour a)
+instance Eq BhvCacheKey where
+        BhvCacheKey (SrvVal a) == BhvCacheKey (SrvVal b)  =  a == b
+        _ == _ = False
 
 instance (JSValue a) => JSValue (Behaviour a) where
         jsValue bhv = do
-                id <- renderUniq
-                case bhv of
-                     (Value x) -> do
-                             val <- jsValue x
-                             renderPutJS $ "r_bhv_val["++show id++"] = "++val++";"
+                mbid <- gets (lookup (BhvCacheKey bhv) . rsBhvCache)
+                case mbid of
+                     Just id  -> return $ show id
+                     Nothing -> do
+                             id <- renderUniq
+                             modify $ \s -> s { rsBhvCache = (BhvCacheKey bhv, id) : rsBhvCache s }
 
-                     (SrvVal name) -> do
-                             renderPutJS $ "r_bhv_srv["++show id++"] = "++show name++";"
+                             case bhv of
+                                  (Value x) -> do
+                                          val <- jsValue x
+                                          renderPutJS $ "r_bhv_val["++show id++"] = "++val++";"
 
-                     (Func f b) -> do
-                             func <- jsFunc f
-                             id' <- jsValue b
-                             renderPutJS $ "r_bhv_deps["++show id++"] = ["++id'++"];"
-                             renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++func++"(r_bhv_val["++id'++"]); };"
+                                  (SrvVal name) -> do
+                                          renderPutJS $ "r_bhv_srv["++show id++"] = "++show name++";"
 
-                return $ show id
+                                  (Func f b) -> do
+                                          func <- jsFunc f
+                                          id' <- jsValue b
+                                          renderPutJS $ "r_bhv_deps["++show id++"] = ["++id'++"];"
+                                          renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++func++"(r_bhv_val["++id'++"]); };"
+
+                                  (Func2 f b c) -> do
+                                          func <- jsFunc f
+                                          id1 <- jsValue b; id2 <- jsValue c
+                                          renderPutJS $ "r_bhv_deps["++show id++"] = ["++id1++", "++id2++"];"
+                                          renderPutJS $ "r_bhv_func["++show id++"] = function() { return "++func++"([r_bhv_val["++id1++"], r_bhv_val["++id2++"]]); };"
+
+                             return $ show id
 
 
 data Event a = Event Int
@@ -144,8 +169,6 @@ mkEvent = return.Event =<< htmlUniq
 
 
 
---mapb :: (a -> b) -> Behaviour [a] -> Behaviour [b]
-
 
 container :: String -> Html -> Html
 container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
@@ -153,13 +176,16 @@ container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
 
 
 
-html = container "html"
-head = container "head"
-title = container "title"
+a = container "a"
 body = container "body"
-ul = container "ul"
+div = container "div"
+head = container "head"
+html = container "html"
 li = container "li"
 script = container "script"
+span = container "span"
+title = container "title"
+ul = container "ul"
 
 type_ = AttrVal "type"
 src = AttrVal "src"
@@ -184,20 +210,28 @@ instance JSFunc ToHtmlString String Html where
 
 data ToHtmlHtmlList = ToHtmlHtmlList
 instance JSFunc ToHtmlHtmlList [Html] Html where
-        jsFunc f = return "r_toHtmlHtmlList"
+        jsFunc f = return "r_prim_toHtmlHtmlList"
 
 
-msg2li :: String -> Html
-msg2li = li . fromString
-
-data Map a b = forall f. (JSValue a, JSValue b, JSFunc f a b) => Map f
-instance JSFunc (Map a b) [a] [b] where
-        jsFunc (Map f) = do
+data BhvMap a b = forall f. (JSValue a, JSValue b, JSFunc f a b) => BhvMap f
+instance JSFunc (BhvMap a b) [a] [b] where
+        jsFunc (BhvMap f) = do
                 jsf <- jsFunc f
                 renderPutJSFun $ "var result = []; for (var i in param) result[i] = "++jsf++"(param[i]); return result; "
-
 bmap :: (JSValue a, JSValue b, JSFunc f a b) => f -> Behaviour [a] -> Behaviour [b]
-bmap f = Func (Map f)
+bmap f = Func (BhvMap f)
+
+data BhvLength a = (JSValue a) => BhvLength
+instance JSFunc (BhvLength a) [a] Int where
+        jsFunc BhvLength = renderPutJSFun $ "return param.length;"
+blength :: (JSValue a) => Behaviour [a] -> Behaviour Int
+blength = Func BhvLength
+
+data BhvEnumFromTo = BhvEnumFromTo
+instance JSFunc BhvEnumFromTo (Int,Int) [Int] where
+        jsFunc BhvEnumFromTo = return "r_prim_enumFromTo"
+benumFromTo :: Behaviour Int -> Behaviour Int -> Behaviour [Int]
+benumFromTo x y = Func2 BhvEnumFromTo x y
 
 
 
@@ -213,25 +247,28 @@ page = html $ do
                 jquery; reactive
         body $ do
                 jsinit
+                let count = SrvVal "count" :: Behaviour Int
                 ul $ do
-                        let count = SrvVal "count" :: Behaviour Int
                         let msg = SrvVal "msg" :: Behaviour String
                         let msgs = SrvVal "msgs" :: Behaviour [String]
 
                         li $ "polozka"
-                        bhv $ Func li $ Func ToHtmlInt count
+                        --bhv $ Func li $ Func ToHtmlInt count
                         bhv $ Func li $ Func ToHtmlString msg
                         bhv $ Func ToHtmlHtmlList $ bmap li $ bmap ToHtmlString msgs
+                        bhv $ Func li $ Func ToHtmlInt $ blength msgs
+
+                bhv $ Func ToHtmlHtmlList $ bmap div $ bmap ToHtmlInt $ benumFromTo (Value 1) count
 
 
 
-data RenderState = RenderState { rsUniq :: Int, rsJavascript :: String }
+data RenderState = RenderState { rsUniq :: Int, rsJavascript :: String, rsBhvCache :: [(BhvCacheKey,Int)] }
 
 type RenderMonad a = StateT RenderState (Writer String) a
 
 
 render :: Html -> String
-render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "")
+render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "" [])
         where render' :: HtmlStructure -> RenderMonad ()
 
               render' (Tag tag attrs xs) = do

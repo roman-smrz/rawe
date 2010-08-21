@@ -36,12 +36,17 @@ function r_bhv_init(id, rdep) {
 }
 
 function r_bhv_update(id) {
+        var update = false;
         for (i in r_bhv_deps[id]) {
-                if (r_bhv_time[r_bhv_deps[id][i]] > r_bhv_time[id]) {
-                        r_bhv_set(id, r_bhv_func[id]());
+                if (r_bhv_val[r_bhv_deps[id][i]] == undefined)
                         return;
-                }
+
+                if (r_bhv_time[r_bhv_deps[id][i]] > r_bhv_time[id])
+                        update = true;
         }
+
+        if (update)
+                r_bhv_set(id, r_bhv_func[id]());
 }
 
 function r_bhv_set(id, value) {
@@ -72,8 +77,15 @@ function call_event(id, value) {
 
 }
 
-function r_toHtmlHtmlList(param) {
+function r_prim_toHtmlHtmlList(param) {
         var result = $('<div></div>');
         for (i in param) result.append(param[i].clone());
         return result.children();
+}
+
+function r_prim_enumFromTo(param) {
+        var result = new Array();
+        for (var i = param[0]; i <= param[1]; i++)
+                result.push(i);
+        return result;
 }
