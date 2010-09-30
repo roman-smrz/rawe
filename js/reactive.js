@@ -1,24 +1,77 @@
-var r_bhv_deps = {};
-var r_bhv_rdeps = {};
 var r_bhv_func = {};
-var r_bhv_srv = {};
-var r_bhv_val = {};
-var r_bhv_time = {};
-var r_srv_bhv = {};
+var r_srv_deps = {};
+var r_srv_val = {};
+var r_srv_expr = {};
+var r_event_deps = {};
+var r_cur_bhv = null;
 
 function r_init() {
         $(document).ready(function() {
-                for (id in r_bhv_func) r_bhv_init(id);
-                for (var id in r_bhv_srv) {
-                        (function(id) {
-                                $.get(document.location.href, { q: r_bhv_srv[id] },
-                                        function(json) { r_bhv_set(id, jQuery.parseJSON(json)); });
-                        })(id);
-                        r_srv_bhv[r_bhv_srv[id]] = id;
+                for (bhv in r_bhv_func)
+                        r_bhv_update(bhv);
+
+                for (srv in r_srv_expr) {
+                        (function(srv, ids) {
+                                $.get(document.location.href, { q: srv },
+                                        function(json) {
+                                                r_srv_val[srv] = jQuery.parseJSON(json)
+                                                for (bhv in ids) r_bhv_update(bhv);
+                                        });
+                        })(srv, r_srv_deps[srv]);
                 }
-                for (id in r_bhv_val) r_bhv_set(id, r_bhv_val[id]);
         });
 }
+
+
+function r_compose(f, g) {
+        var result = function(param) {
+                if (typeof param == 'undefined') return undefined;
+                param = g(param);
+                if (typeof param == 'undefined') return undefined;
+                return f(param);
+        }
+        return result;
+}
+
+function r_product(f, g) {
+        return (function(param) {
+                if (typeof param == 'undefined')
+                        return undefined;
+                x = f(param); y = g(param);
+                if (typeof x == 'undefined' || typeof y == 'undefined')
+                        return undefined;
+                return [x, y];
+        });
+}
+
+function r_bhv_update(bhv) {
+        r_cur_bhv = bhv;
+        var value = r_bhv_func[bhv](null);
+        if (typeof value == 'undefined')
+                return;
+
+        var first = true
+        $('*[bhv-id="'+bhv+'"]').each(function() {
+                if (first) {
+                        var newNode = value.clone();
+                        newNode.each(function() { $(this).attr('bhv-id', ''+bhv); });
+                        $(this).replaceWith(newNode);
+                        first = false;
+                } else {
+                        $(this).remove();
+                }
+        });
+}
+
+function r_srv_call(name) {
+        if (r_srv_deps[name] == undefined)
+                r_srv_deps[name] = {};
+        r_srv_deps[name][r_cur_bhv] = true;
+        r_srv_expr[name] = name;
+
+        return r_srv_val[name];
+}
+
 
 function r_bhv_init(id, rdep) {
         if (r_bhv_rdeps[id] == undefined)
@@ -35,43 +88,6 @@ function r_bhv_init(id, rdep) {
         }
 }
 
-function r_bhv_update(id) {
-        var update = false;
-        for (i in r_bhv_deps[id]) {
-                if (r_bhv_val[r_bhv_deps[id][i]] == undefined)
-                        return;
-
-                if (r_bhv_time[r_bhv_deps[id][i]] > r_bhv_time[id])
-                        update = true;
-        }
-
-        if (update)
-                r_bhv_set(id, r_bhv_func[id]());
-}
-
-function r_bhv_set(id, value) {
-        r_bhv_val[id] = value;
-        r_bhv_time[id] = (new Date()).getTime();
-
-        var first = true
-        $('*[bhv-id="'+id+'"]').each(function() {
-                if (first) {
-                        var newNode = value.clone();
-                        newNode.each(function() { $(this).attr('bhv-id', ''+id); });
-                        $(this).replaceWith(newNode);
-                        first = false;
-                } else {
-                        $(this).remove();
-                }
-        });
-
-        for (i in r_bhv_rdeps[id])
-                r_bhv_update(r_bhv_rdeps[id][i]);
-}
-
-function r_srv_val(name) {
-
-}
 
 function call_event(id, value) {
 
