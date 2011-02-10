@@ -120,6 +120,11 @@ function r_update_html() {
                         if (first) {
                                 var newNode = value.clone();
                                 newNode.each(function() { $(this).attr('bhv-id', ''+b.id); });
+                                newNode.find('input:text').each(function() {
+                                        var gen = $(this).attr('bhv-gen');
+                                        if (gen) $(this).val(r_behaviours[gen].value);
+                                });
+
                                 for (i in r_init_html_funs) r_init_html_funs[i](newNode);
                                 $(this).replaceWith(newNode);
                                 first = false;
@@ -148,7 +153,7 @@ function r_init_gen(b, elem) {
         }
 
         if (elem.is('input:text')) {
-                b.value = '';
+                b.value = elem.val();
                 elem.change(function(e) {
                         b.change(elem.val());
                 });
