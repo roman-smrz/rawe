@@ -43,28 +43,29 @@ class JSFunc f a b | f -> a b where
 class JSValue a where
         jsValue :: a -> HtmlM RawJS
         jsValueList :: [a] -> HtmlM RawJS
-        jsValueList = return.RawJS.("["++).(++"]") . drop 1 . concat <=< mapM (return.(',':).(\(RawJS x)->x) <=< jsValue)
+        jsValueList = return.RawJS.("cthunk(["++).(++"])") . drop 1 . concat <=<
+                        mapM (return.(',':).(\(RawJS x)->x) <=< jsValue)
 
 instance (JSValue a) => JSValue [a] where
         jsValue = jsValueList
 
-instance JSValue () where jsValue () = return "[]"
-instance JSValue Int where jsValue = return.RawJS . show
-instance JSValue Bool where jsValue x = return $ if x then "true" else "false"
+instance JSValue () where jsValue () = return "cthunk([])"
+instance JSValue Int where jsValue x = return.RawJS $ "cthunk("++show x++")"
+instance JSValue Bool where jsValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
 
 instance JSValue Attribute where
         jsValue (AttrVal name value) = do
                 (RawJS jn) <- jsValue name; (RawJS jv) <- jsValue value
-                return.RawJS $ "{ AttrVal: ["++jn++","++jv++"] }"
+                return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
         jsValue (AttrBool name) = do
                 (RawJS jn) <- jsValue name
-                return.RawJS $ "{ AttrBool: ["++jn++"] }"
+                return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
 
 
 instance JSValue (HtmlM a) where
         jsValue html = do
                 (raw, _) <- renderH html
-                return.RawJS $ "$('"++escapeStringJS raw++"')"
+                return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
 
 jsHtml :: HtmlM a -> HtmlM (RawJS, a)
 jsHtml html = do
@@ -72,18 +73,18 @@ jsHtml html = do
         return (RawJS $ "$('"++escapeStringJS raw++"')", x)
 
 instance JSValue Char where
-        jsValue = return.RawJS . show
-        jsValueList = return.RawJS . show
+        jsValue x = return.RawJS $ "cthunk("++show x++")"
+        jsValueList x = return.RawJS $ "cthunk("++show x++")"
 
 instance (JSValue a, JSValue b) => JSValue (a, b) where
         jsValue (x,y) = do
                 (RawJS x') <- jsValue x; (RawJS y') <- jsValue y
-                return.RawJS $ "["++x'++", "++y'++"]"
+                return.RawJS $ "cthunk(["++x'++", "++y'++"])"
 
 instance (JSValue a) => JSValue (Maybe a) where
         jsValue (Just x) = do (RawJS jx) <- jsValue x
-                              return.RawJS $ "{Just:"++jx++"}"
-        jsValue Nothing  = return.RawJS $ "{Nothing:null}"
+                              return.RawJS $ "cthunk({Just:"++jx++"})"
+        jsValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
 
 {-
 instance (JSValue a) => JSValue (Timed a) where
@@ -234,7 +235,7 @@ addBehaviourI _ BhvID = return (-1)
 
 instance JSValue (BehaviourFun a b) where
         jsValue f = do jid <- return.show =<< addBehaviour f
-                       return $ RawJS $ "r_behaviours["++jid++"]"
+                       return $ RawJS $ "cthunk(r_behaviours["++jid++"])"
 
 
 data HtmlState = HtmlState

@@ -12,6 +12,29 @@ var r_current_time = 0;
 var r_init_html_funs = [];
 
 
+
+function Thunk(thunk) {
+        this.computed = false;
+        this.value = null;
+        this.thunk = thunk;
+
+        this.get = function() {
+                if (!this.computed) {
+                        this.value = this.thunk();
+                        this.computed = true;
+                }
+                return this.value;
+        }
+}
+
+function cthunk(x) {
+        thunk = new Thunk();
+        thunk.value = x;
+        thunk.computed = true;
+        return thunk;
+}
+
+
 function Behaviour(id) {
         this.id = id;
         this.depend = {};
@@ -35,8 +58,8 @@ function Behaviour(id) {
         */
 
         this.compute = function(x) {
-                if (typeof x != 'undefined')
-                        return this.compute_(x);
+                var b = this;
+                return new Thunk(function() { return b.compute_(x.get()) });
         }
 
         this.invalidate = function() {
@@ -109,9 +132,10 @@ function r_init() {
         });
 }
 
+var null_thunk = new Thunk(function() { return null; });
 function r_update_html() {
         while (b = r_invalid_html.shift()) {
-                var value = b.compute(null);
+                var value = b.compute(null_thunk).get();
                 if (typeof value == 'undefined')
                         value = $('<div></div>');
 
@@ -122,7 +146,8 @@ function r_update_html() {
                                 newNode.each(function() { $(this).attr('bhv-id', ''+b.id); });
                                 newNode.find('input:text').each(function() {
                                         var gen = $(this).attr('bhv-gen');
-                                        if (gen) $(this).val(r_behaviours[gen].value);
+                                        if (gen && r_behaviours[gen].value)
+                                                $(this).val(r_behaviours[gen].value.get());
                                 });
 
                                 for (i in r_init_html_funs) r_init_html_funs[i](newNode);
@@ -141,19 +166,19 @@ function r_update_html() {
 function r_init_gen(b, elem) {
         if (elem.is('form')) {
                 if (typeof b.value == 'undefined')
-                        b.value = { NotYet: null };
+                        b.value = cthunk({ NotYet: null });
                 elem.submit(function(e) {
                         e.preventDefault();
                         var result = [];
                         elem.find('input, select, textarea').each(function() {
-                                result.push([$(this).attr('name'), $(this).val()]);
+                                result.push(cthunk( [cthunk( $(this).attr('name') ), cthunk( $(this).val() )] ));
                         });
-                        b.change({ Timed: [++r_current_time, result] });
+                        b.change({ Timed: [++r_current_time, cthunk( result )] });
                 });
         }
 
         if (elem.is('input:text')) {
-                b.value = elem.val();
+                b.value = cthunk( elem.val() );
                 elem.change(function(e) {
                         b.change(elem.val());
                 });
