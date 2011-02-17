@@ -211,26 +211,19 @@ addBehaviour' id name params =
 
 
 addBehaviour :: BehaviourFun a b -> HtmlM Int
+addBehaviour b = do
+        -- We need to do this so b does not need to be evaluated for internal
+        -- unique counter and mfix may work for mutually recursive behaviours.
+        nid <- htmlUniq
 
-addBehaviour (Prim f) = do
-        (name, params) <- bhvPrim f
-        id <- htmlUniq
-        addBehaviour' id name params
-        return id
+        case b of
+             Prim f -> do
+                     (name, params) <- bhvPrim f
+                     addBehaviour' nid name params
+                     return nid
 
-addBehaviour (Assigned id) = return id
-addBehaviour BhvID = return (-1)
-
-
-addBehaviourI :: Int -> BehaviourFun a b -> HtmlM Int
-
-addBehaviourI id (Prim f) = do
-        (name, params) <- bhvPrim f
-        addBehaviour' id name params
-        return id
-
-addBehaviourI _ (Assigned id) = return id
-addBehaviourI _ BhvID = return (-1)
+             Assigned id -> return id
+             BhvID -> return (-1)
 
 
 instance JSValue (BehaviourFun a b) where
@@ -635,9 +628,8 @@ page = html $ do
                 return ()
 
 post :: (JSON a, JSON b) => String -> Behaviour (Timed a) -> HtmlM (Behaviour (Maybe b))
-post name x = do id <- htmlUniq
-                 id' <- addBehaviourI id $ (Prim $ BhvServer "spost" name) . x
-                 HtmlM $ \s -> (Assigned id', ([], s { hsHtmlBehaviours = id' : hsHtmlBehaviours s } ))
+post name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" name) . x
+                 HtmlM $ \s -> (Assigned id, ([], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
 
 bstr :: String -> Behaviour Html
 bstr = fromString
