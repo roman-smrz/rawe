@@ -236,6 +236,8 @@ data HtmlM a = HtmlM (HtmlState -> (a, ([HtmlStructure], HtmlState)))
 type Html = HtmlM ()
 
 
+instance Functor HtmlM where
+        fmap f (HtmlM hf) = HtmlM $ \s -> (\(x, hs)->(f x, hs)) (hf s)
 
 instance Monad HtmlM where
         return x = HtmlM $ \s -> (x, ([], s))
