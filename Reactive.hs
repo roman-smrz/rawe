@@ -399,6 +399,9 @@ instance BehaviourPrim (HaskToBhv a b) a b where
 haskToBhv :: (Behaviour a -> Behaviour b) -> BehaviourFun a b
 haskToBhv = Prim . HaskToBhv
 
+b_uncurry :: (Behaviour a -> Behaviour b -> Behaviour c) -> Behaviour (a, b) -> Behaviour c
+b_uncurry f x = f (fst . x) (snd . x)
+
 
 {- Bool constructors and destructor #-}
 
@@ -678,14 +681,6 @@ b_return = b_just
 x ~>>= f = b_maybe b_nothing f x
 
 b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
-
-b_uncurry :: (Behaviour a -> Behaviour b -> Behaviour c) -> Behaviour (a, b) -> Behaviour c
-b_uncurry f = binOp "uncurry" (cb $ haskToBhv $ cb . haskToBhv . f)
-
---b_pair :: Behaviour a -> Behaviour b -> Behaviour (a, b)
-
---b_maybePair :: Behaviour (Maybe a, Maybe b) -> Behaviour (Maybe (a,b))
---b_maybePair = b_uncurry $ \mx my -> mx ~>>= \x -> my ~>>= \y -> b_return (x, y)
 
 
 
