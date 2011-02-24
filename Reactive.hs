@@ -399,7 +399,7 @@ instance BehaviourPrim (HaskToBhv a b) a b where
 haskToBhv :: (Behaviour a -> Behaviour b) -> BehaviourFun a b
 haskToBhv = Prim . HaskToBhv
 
-b_uncurry :: (Behaviour a -> Behaviour b -> Behaviour c) -> Behaviour (a, b) -> Behaviour c
+b_uncurry :: (Behaviour a -> Behaviour b -> c) -> Behaviour (a, b) -> c
 b_uncurry f x = f (fst . x) (snd . x)
 
 
