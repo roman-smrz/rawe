@@ -35,6 +35,12 @@ function r_prim_bhv_to_html_inner(out) {
         }); }
 }
 
+function r_prim_bjoin(out) {
+        this.compute = function(x) {
+                return out.get().compute([]).get().compute(x);
+        }
+}
+
 // BehaviourFun a b -> BehaviourFun b c -> BehaviourFun a c
 function r_prim_compose(f, g) {
         this.depend[f.get().id] = true;
