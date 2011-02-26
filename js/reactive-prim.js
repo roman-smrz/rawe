@@ -63,6 +63,16 @@ function r_prim_debug() {
         };
 }
 
+function r_prim_fix() {
+        this.compute = function(x) {
+                var thunk;
+                thunk = new Thunk(function() {
+                        return x.get().compute(thunk).get();
+                });
+                return thunk;
+        }
+}
+
 function r_prim_eq_string() {
         this.compute_ = function(params) {
                 return params[0].get() == params[1].get();

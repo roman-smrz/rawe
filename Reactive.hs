@@ -485,6 +485,12 @@ terOp name x y z = primFunc name . (x &&& y &&& z)
 bjoin :: Behaviour (BehaviourFun a b) -> BehaviourFun a b
 bjoin = Prim . BhvModifier "bjoin"
 
+b_fix :: (Behaviour a -> Behaviour a) -> Behaviour a
+b_fix = unOp "fix" . cb . haskToBhv
+
+bfix :: ((Behaviour a -> Behaviour b) -> (Behaviour a -> Behaviour b)) -> Behaviour a -> Behaviour b
+bfix f = (.) $ bjoin $ b_fix ((\x -> cb $ haskToBhv $ f x) . (.) . bjoin)
+
 
 instance Eq (BehaviourFun a b) where
         _ == _ = error "Eq instance for behaviours is required for Num, but is meaningless"
