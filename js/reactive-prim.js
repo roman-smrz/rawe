@@ -67,9 +67,11 @@ function r_prim_error() {
         this.compute_ = function(msg) { alert(msg); };
 }
 
-/*
-function r_prim_fst() {}
-*/
+function r_prim_fst() {
+        this.compute = function(x) { return new Thunk(function() {
+                return x.get()[0].get();
+        }); }
+}
 
 function r_prim_gen() {
         this.compute = function() {
@@ -194,9 +196,11 @@ function r_prim_spost(name) {
         }); };
 }
 
-/*
-function r_prim_snd() {}
-*/
+function r_prim_snd() {
+        this.compute = function(x) { return new Thunk(function() {
+                return x.get()[1].get();
+        }); }
+}
 
 function r_prim_to_html_int() {
         this.compute_ = function(x) {
