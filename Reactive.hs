@@ -19,7 +19,7 @@ import Control.Monad.Writer
 
 import Data.String
 
-import Text.JSON hiding (JSValue)
+import Text.JSON
 
 
 import Debug.Trace
@@ -37,30 +37,30 @@ instance IsString RawJS where fromString = RawJS
 
 
 
-class JSValue a where
-        jsValue :: a -> HtmlM RawJS
-        jsValueList :: [a] -> HtmlM RawJS
-        jsValueList = return.RawJS.("cthunk(["++).(++"])") . drop 1 . concat <=<
-                        mapM (return.(',':).(\(RawJS x)->x) <=< jsValue)
+class BhvValue a where
+        bhvValue :: a -> HtmlM RawJS
+        bhvValueList :: [a] -> HtmlM RawJS
+        bhvValueList = return.RawJS.("cthunk(["++).(++"])") . drop 1 . concat <=<
+                        mapM (return.(',':).(\(RawJS x)->x) <=< bhvValue)
 
-instance (JSValue a) => JSValue [a] where
-        jsValue = jsValueList
+instance (BhvValue a) => BhvValue [a] where
+        bhvValue = bhvValueList
 
-instance JSValue () where jsValue () = return "cthunk([])"
-instance JSValue Int where jsValue x = return.RawJS $ "cthunk("++show x++")"
-instance JSValue Bool where jsValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
+instance BhvValue () where bhvValue () = return "cthunk([])"
+instance BhvValue Int where bhvValue x = return.RawJS $ "cthunk("++show x++")"
+instance BhvValue Bool where bhvValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
 
-instance JSValue Attribute where
-        jsValue (AttrVal name value) = do
-                (RawJS jn) <- jsValue name; (RawJS jv) <- jsValue value
+instance BhvValue Attribute where
+        bhvValue (AttrVal name value) = do
+                (RawJS jn) <- bhvValue name; (RawJS jv) <- bhvValue value
                 return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
-        jsValue (AttrBool name) = do
-                (RawJS jn) <- jsValue name
+        bhvValue (AttrBool name) = do
+                (RawJS jn) <- bhvValue name
                 return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
 
 
-instance JSValue (HtmlM a) where
-        jsValue html = do
+instance BhvValue (HtmlM a) where
+        bhvValue html = do
                 (raw, _) <- renderH html
                 return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
 
@@ -69,26 +69,26 @@ jsHtml html = do
         (raw, x) <- renderH html
         return (RawJS $ "$('"++escapeStringJS raw++"')", x)
 
-instance JSValue Char where
-        jsValue x = return.RawJS $ "cthunk("++show x++")"
-        jsValueList x = return.RawJS $ "cthunk("++show x++")"
+instance BhvValue Char where
+        bhvValue x = return.RawJS $ "cthunk("++show x++")"
+        bhvValueList x = return.RawJS $ "cthunk("++show x++")"
 
-instance (JSValue a, JSValue b) => JSValue (a, b) where
-        jsValue (x,y) = do
-                (RawJS x') <- jsValue x; (RawJS y') <- jsValue y
+instance (BhvValue a, BhvValue b) => BhvValue (a, b) where
+        bhvValue (x,y) = do
+                (RawJS x') <- bhvValue x; (RawJS y') <- bhvValue y
                 return.RawJS $ "cthunk(["++x'++", "++y'++"])"
 
-instance (JSValue a) => JSValue (Maybe a) where
-        jsValue (Just x) = do (RawJS jx) <- jsValue x
-                              return.RawJS $ "cthunk({Just:"++jx++"})"
-        jsValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
+instance (BhvValue a) => BhvValue (Maybe a) where
+        bhvValue (Just x) = do (RawJS jx) <- bhvValue x
+                               return.RawJS $ "cthunk({Just:"++jx++"})"
+        bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
 
 {-
-instance (JSValue a) => JSValue (Timed a) where
-        jsValue (Timed t x) = do (RawJS jt) <- jsValue t
-                                 (RawJS jx) <- jsValue x
-                                 return.RawJS $ "{Timed:["++jt++","++jx++"]}"
-        jsValue NotYet = return.RawJS $ "{NotYet:null}"
+instance (BhvValue a) => BhvValue (Timed a) where
+        bhvValue (Timed t x) = do (RawJS jt) <- bhvValue t
+                                  (RawJS jx) <- bhvValue x
+                                  return.RawJS $ "{Timed:["++jt++","++jx++"]}"
+        bhvValue NotYet = return.RawJS $ "{NotYet:null}"
         -}
 
 
@@ -161,7 +161,7 @@ class BehaviourPrim f a b | f -> a b where
 data BhvServer a b = BhvServer String String
 instance BehaviourPrim (BhvServer a b) a b where
         bhvPrim (BhvServer func name) = do
-                jname <- jsValue name
+                jname <- bhvValue name
                 return (func, [jname])
 
 
@@ -215,9 +215,9 @@ addBehaviour b = do
              BhvID -> return (-1)
 
 
-instance JSValue (BehaviourFun a b) where
-        jsValue f = do jid <- return.show =<< addBehaviour f
-                       return $ RawJS $ "cthunk(r_behaviours["++jid++"])"
+instance BhvValue (BehaviourFun a b) where
+        bhvValue f = do jid <- return.show =<< addBehaviour f
+                        return $ RawJS $ "cthunk(r_behaviours["++jid++"])"
 
 
 data HtmlState = HtmlState
@@ -284,10 +284,10 @@ addAttr _ t@(Text _) = t
 data AddAttr = AddAttr Attribute
 instance BehaviourPrim AddAttr Html Html where
         bhvPrim (AddAttr (AttrVal name val)) = do
-                jname <- jsValue name; jval <- jsValue val
+                jname <- bhvValue name; jval <- bhvValue val
                 return ("add_attr", [jname, jval])
         bhvPrim (AddAttr (AttrBool name)) = do
-                jname <- jsValue name; jval <- jsValue True
+                jname <- bhvValue name; jval <- bhvValue True
                 return ("add_attr", [jname, jval])
 
 
@@ -382,7 +382,7 @@ data BhvHtmlB a = BhvHtmlB (Behaviour Html) (Behaviour a)
 instance BehaviourPrim (BhvHtmlB a) () (HtmlM (Behaviour a)) where
         bhvPrim (BhvHtmlB html b) = do
                 bid <- addBehaviour b
-                htmlv <- jsValue $ html ! AttrVal "bhv-gen" (show bid)
+                htmlv <- bhvValue $ html ! AttrVal "bhv-gen" (show bid)
                 return ("const", [htmlv])
 
 toHtmlB :: (ToHtmlBehaviour h) => Behaviour a -> Behaviour h -> Behaviour (HtmlM (Behaviour a))
@@ -391,9 +391,9 @@ toHtmlB v x = Prim $ BhvHtmlB (toHtml x) v
 
 data HaskToBhv a b = HaskToBhv (Behaviour a -> Behaviour b)
 instance BehaviourPrim (HaskToBhv a b) a b where
-        bhvPrim (HaskToBhv f) = do iid <- htmlUniq; ji <- jsValue $ Assigned iid
+        bhvPrim (HaskToBhv f) = do iid <- htmlUniq; ji <- bhvValue $ Assigned iid
                                    addBehaviour' iid "hask_to_bhv_inner" []
-                                   jf <- jsValue (f $ Assigned iid)
+                                   jf <- bhvValue (f $ Assigned iid)
                                    return ("hask_to_bhv", [ji, jf])
 
 haskToBhv :: (Behaviour a -> Behaviour b) -> BehaviourFun a b
@@ -450,9 +450,9 @@ instance BehaviourPrim BhvEnumFromTo (Int,Int) [Int] where
 benumFromTo :: BehaviourFun (Int,Int) [Int]
 benumFromTo = Prim BhvEnumFromTo
 
-data BhvConst a b = (JSValue b) => BhvConst b
+data BhvConst a b = (BhvValue b) => BhvConst b
 instance BehaviourPrim (BhvConst a b) a b where
-        bhvPrim (BhvConst x) = do jx <- jsValue x
+        bhvPrim (BhvConst x) = do jx <- bhvValue x
                                   return ("const", [jx])
 
 
@@ -462,12 +462,12 @@ instance BehaviourPrim (BhvPrimFunc a b) a b where
 
 data BhvModifier a b c d = BhvModifier String (BehaviourFun a b)
 instance BehaviourPrim (BhvModifier a b c d) c d where
-        bhvPrim (BhvModifier name x) = do jx <- jsValue x
+        bhvPrim (BhvModifier name x) = do jx <- bhvValue x
                                           return (name, [jx])
 
 data BhvModifier2 a b c d e f = BhvModifier2 String (BehaviourFun a b) (BehaviourFun c d)
 instance BehaviourPrim (BhvModifier2 a b c d e f) e f where
-        bhvPrim (BhvModifier2 name x y) = do jx <- jsValue x; jy <- jsValue y
+        bhvPrim (BhvModifier2 name x y) = do jx <- bhvValue x; jy <- bhvValue y
                                              return (name, [jx, jy])
 
 
@@ -521,14 +521,14 @@ instance BehaviourToHtml () where
 
 instance BehaviourToHtml (Behaviour a) where
         bhv x = do id <- addBehaviour x
-                   jbhv <- jsValue (Assigned id :: Behaviour (HtmlM (Behaviour a)))
+                   jbhv <- bhvValue (Assigned id :: Behaviour (HtmlM (Behaviour a)))
                    nid <- htmlUniq
                    addBehaviour' nid "bhv_to_html_inner" [jbhv]
                    HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
 
 
 
-cb :: (JSValue a) => a -> BehaviourFun b a
+cb :: (BhvValue a) => a -> BehaviourFun b a
 cb x = Prim $ BhvConst x
 
 page = html $ do
@@ -664,7 +664,7 @@ b_length = unOp "length"
 b_fromJust :: Behaviour (Maybe b) -> Behaviour b
 b_fromJust = b_maybe (b_error "fromJust: Nothing") id
 
-b_lookup' :: (JSValue a, JSValue b) => BehaviourFun (a, [(a, b)]) (Maybe b)
+b_lookup' :: (BhvValue a, BhvValue b) => BehaviourFun (a, [(a, b)]) (Maybe b)
 b_lookup' = primFunc "lookup"
 b_lookup = bcurry b_lookup'
 
