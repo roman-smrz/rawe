@@ -132,10 +132,9 @@ function r_init() {
         });
 }
 
-var null_thunk = new Thunk(function() { return null; });
 function r_update_html() {
         while (b = r_invalid_html.shift()) {
-                var value = b.compute(null_thunk).get();
+		var value = b.compute(cthunk(null), {}).get();
                 if (typeof value == 'undefined')
                         value = $('<div></div>');
 

@@ -19,7 +19,7 @@ function r_prim_bhv_to_html_inner(out) {
         var b = this;
         this.depend[out.get().id] = true;
 
-        this.compute = function(x) { return new Thunk(function() {
+        this.compute = function(x, env) { return new Thunk(function() {
                 $('*[bhv-id='+out.get().id+']').each(function() {
                         var gen = $(this).attr('bhv-gen');
                         // TODO: some error message
@@ -31,13 +31,13 @@ function r_prim_bhv_to_html_inner(out) {
                         // TODO: clear old dependency
                 });
                 if (!b.gen) return cthunk( { Nothing: null, NotYet: null } );
-                return r_behaviours[b.gen].compute(x).get();
+                return r_behaviours[b.gen].compute(x, env).get();
         }); }
 }
 
 function r_prim_bjoin(out) {
-        this.compute = function(x) {
-                return out.get().compute([]).get().compute(x);
+        this.compute = function(x, env) {
+                return out.get().compute(cthunk([]), env).get().compute(x, env);
         }
 }
 
@@ -46,14 +46,26 @@ function r_prim_compose(f, g) {
         this.depend[f.get().id] = true;
         this.depend[g.get().id] = true;
 
-        this.compute = function(x) {
-                return g.get().compute(f.get().compute(x));
+        this.compute = function(x, env) {
+                return g.get().compute(f.get().compute(x, env), env);
         };
 }
 
 // a -> BehaviourFun b a
 function r_prim_const(value) {
-        this.compute = function() { return value; };
+        this.compute = function(x, env) {
+                return new Thunk(function() {
+                        var vg = value.get();
+                        if (vg.constructor.name == 'Behaviour') {
+                                bhv = new Behaviour();
+                                bhv.compute = function(x) {
+                                        return vg.compute(x, env);
+                                };
+                                return bhv;
+                        }
+                        return vg;
+                });
+        };
 }
 
 function r_prim_debug() {
@@ -64,10 +76,10 @@ function r_prim_debug() {
 }
 
 function r_prim_fix() {
-        this.compute = function(x) {
+        this.compute = function(x, env) {
                 var thunk;
                 thunk = new Thunk(function() {
-                        return x.get().compute(thunk).get();
+                        return x.get().compute(thunk, env).get();
                 });
                 return thunk;
         }
@@ -105,15 +117,24 @@ function r_prim_gen() {
 
 function r_prim_hask_to_bhv(inner, func) {
         this.depend[func.get().id] = true;
-        this.compute = function(x) { return new Thunk(function() {
-                // TODO: the value of inner behaviour may be change in the meantime
-                inner.get().value = x;
-                return func.get().compute(cthunk([])).get();
-        }); };
+        this.compute = function(x, env) {
+                var h2b = env.h2b || {};
+                var nh2b = {};
+                for (i in h2b) nh2b[i] = h2b[i];
+                nh2b[inner.get().id] = x;
+
+                var nenv = {};
+                for (i in env) nenv[i] = env[i];
+                nenv.h2b = nh2b;
+
+                return func.get().compute(cthunk([]), nenv);
+        };
 }
 
 function r_prim_hask_to_bhv_inner() {
-        this.compute = function() { return this.value; };
+        this.compute = function(x, env) {
+                return env.h2b[this.id];
+        };
 }
 
 function r_prim_length() {
@@ -155,8 +176,8 @@ function r_prim_plus_mb() {
 function r_prim_product(f, g) {
         this.depend[f.get().id] = true;
         this.depend[g.get().id] = true;
-        this.compute = function(x) { return new Thunk(function() {
-                return [f.get().compute(x), g.get().compute(x)];
+        this.compute = function(x, env) { return new Thunk(function() {
+                return [f.get().compute(x, env), g.get().compute(x, env)];
         }); };
 }
 
@@ -276,14 +297,14 @@ function r_prim_just() {
 }
 
 function r_prim_maybe() {
-        this.compute = function(params) { return new Thunk(function() {
+        this.compute = function(params, env) { return new Thunk(function() {
                 var def = params.get()[0];
                 var func = params.get()[1].get()[0];
                 var mb = params.get()[1].get()[1];
 
                 if (typeof mb.get().Just == 'undefined')
                         return def.get();
-                return func.get().compute(mb.get().Just).get();
+                return func.get().compute(mb.get().Just, env).get();
         }); };
 }
 
@@ -299,13 +320,13 @@ function r_prim_on_time() {
 }
 
 function r_prim_timed() {
-        this.compute = function(params) { return new Thunk(function() {
+        this.compute = function(params, env) { return new Thunk(function() {
                 var not_yet = params.get()[0];
                 var on_time = params.get()[1].get()[0];
                 var value = params.get()[1].get()[1];
 
                 if (typeof value.get().Timed == 'undefined')
                         return not_yet.get();
-                return on_time.get().compute(value.get().Timed[1]).get();
+                return on_time.get().compute(value.get().Timed[1], env).get();
         }); };
 }
