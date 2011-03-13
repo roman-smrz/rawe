@@ -5,6 +5,7 @@
 
 {-# LANGUAGE DoRec #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Reactive where
 
@@ -402,6 +403,22 @@ haskToBhv = Prim . HaskToBhv
 b_uncurry :: (Behaviour a -> Behaviour b -> c) -> Behaviour (a, b) -> c
 b_uncurry f x = f (fst . x) (snd . x)
 
+b_curry :: (Behaviour (a, b) -> c) -> Behaviour a -> Behaviour b -> c
+b_curry f x y = f (x &&& y)
+
+class BhvCurrying a ps r | a -> ps r where
+        b_uncurryAll :: a -> Behaviour ps -> r
+        b_curryAll :: (Behaviour ps -> r) -> a
+
+instance BhvCurrying (Behaviour a -> Behaviour b) a (Behaviour b) where
+        b_uncurryAll = id
+        b_curryAll = id
+
+instance (BhvCurrying (Behaviour b -> r) ps r') =>
+        BhvCurrying (Behaviour a -> Behaviour b -> r) (a, ps) r' where
+
+        b_uncurryAll f = b_uncurry (\x -> b_uncurryAll (f x))
+        b_curryAll f = \x -> b_curryAll $ (b_curry f) x
 
 {- Bool constructors and destructor #-}
 
@@ -488,8 +505,16 @@ bjoin = Prim . BhvModifier "bjoin"
 b_fix :: (Behaviour a -> Behaviour a) -> Behaviour a
 b_fix = unOp "fix" . cb . haskToBhv
 
-bfix :: ((Behaviour a -> Behaviour b) -> (Behaviour a -> Behaviour b)) -> Behaviour a -> Behaviour b
-bfix f = (.) $ bjoin $ b_fix ((\x -> cb $ haskToBhv $ f x) . (.) . bjoin)
+
+class BhvFix a where
+        bfix :: (a -> a) -> a
+
+instance BhvFix (Behaviour a) where
+        bfix = b_fix
+
+instance (BhvFix b, BhvCurrying (Behaviour a -> b) ps (Behaviour d)) => BhvFix (Behaviour a -> b) where
+        bfix f = b_curryAll $ (.) $ bjoin $ b_fix ((\x -> cb $ haskToBhv $ f' x) . (.) . bjoin)
+                where f' = b_uncurryAll . \f1 -> f (b_curryAll f1)
 
 
 instance Eq (BehaviourFun a b) where
