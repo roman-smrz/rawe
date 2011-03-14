@@ -85,6 +85,12 @@ function r_prim_fix() {
         }
 }
 
+function r_prim_eq() {
+        this.compute_ = function(params) {
+                return params[0].get() == params[1].get();
+        };
+}
+
 function r_prim_eq_string() {
         this.compute_ = function(params) {
                 return params[0].get() == params[1].get();
@@ -328,5 +334,16 @@ function r_prim_timed() {
                 if (typeof value.get().Timed == 'undefined')
                         return not_yet.get();
                 return on_time.get().compute(value.get().Timed[1], env).get();
+        }); };
+}
+
+function r_prim_timed_fmap() {
+        this.compute = function(params, env) { return new Thunk(function() {
+                var f = params.get()[0];
+                var x = params.get()[1];
+
+                if (typeof x.get().Timed != 'undefined')
+                        return { Timed: [ x.get().Timed[0], f.get().compute(x.get().Timed[1], env) ] };
+                return x.get();
         }); };
 }

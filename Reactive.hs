@@ -420,7 +420,48 @@ instance (BhvCurrying (Behaviour b -> r) ps r') =>
         b_uncurryAll f = b_uncurry (\x -> b_uncurryAll (f x))
         b_curryAll f = \x -> b_curryAll $ (b_curry f) x
 
-{- Bool constructors and destructor #-}
+
+
+{- Basic classes and functions -}
+
+
+class BEq a where
+        (~==) :: Behaviour a -> Behaviour a -> Behaviour Bool
+        x ~== y = b_not $ x ~/= y
+        (~/=) :: Behaviour a -> Behaviour a -> Behaviour Bool
+        x ~/= y = b_not $ x ~== y
+
+
+class BFunctor f where
+        b_fmap :: (Behaviour a -> Behaviour b) -> (Behaviour (f a)) -> (Behaviour (f b))
+
+
+class BFunctor m => BMonad m where
+        b_return :: Behaviour a -> Behaviour (m a)
+
+        (~>>=) :: Behaviour (m a) -> (Behaviour a -> Behaviour (m b)) -> Behaviour (m b)
+        x ~>>= f = b_join $ b_fmap f x
+
+        b_join :: Behaviour (m (m a)) -> Behaviour (m a)
+        b_join = (~>>= id)
+
+
+b_liftM2 :: (BMonad m) => (Behaviour a -> Behaviour b -> Behaviour c) ->
+        Behaviour (m a) -> Behaviour (m b) -> Behaviour (m c)
+b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
+
+
+{- Int instances -}
+
+instance BEq Int where (~==) = binOp "eq"
+
+
+{- Char instances -}
+
+instance BEq Char where (~==) = binOp "eq"
+
+
+{- Bool constructors, destructor, instances and functions -}
 
 b_true :: Behaviour Bool
 b_true = primFunc "true"
@@ -433,8 +474,20 @@ b_bool = terOp "bool"
 
 b_ite c t f = b_bool t f c
 
+instance BEq Bool where
+        x ~== y = b_bool y (b_not y) x
 
-{- Maybe constructors and destructor #-}
+b_not :: Behaviour Bool -> Behaviour Bool
+b_not = b_bool b_false b_true
+
+(~&&) :: Behaviour Bool -> Behaviour Bool -> Behaviour Bool
+x ~&& y = b_bool y x x
+
+(~||) :: Behaviour Bool -> Behaviour Bool -> Behaviour Bool
+x ~|| y = b_bool x y x
+
+
+{- Maybe constructors, destructor, instances and functions -}
 
 b_nothing :: Behaviour (Maybe a)
 b_nothing = primFunc "nothing"
@@ -445,8 +498,23 @@ b_just = unOp "just"
 b_maybe :: Behaviour b -> (Behaviour a -> Behaviour b) -> Behaviour (Maybe a) -> Behaviour b
 b_maybe def f = terOp "maybe" def (cb $ haskToBhv f)
 
+instance BEq a => BEq (Maybe a) where
+        x ~== y = b_maybe (b_maybe b_true (const b_false) y) (\xv -> b_maybe b_false (xv ~==) y) x
 
-{- Timed constructors and destructor #-}
+instance BFunctor Maybe where
+        b_fmap f = b_maybe b_nothing (b_just . f)
+
+instance BMonad Maybe where
+        b_return = b_just
+        x ~>>= f = b_maybe b_nothing f x
+        b_join = b_maybe b_nothing id
+
+b_fromJust :: Behaviour (Maybe b) -> Behaviour b
+b_fromJust = b_maybe (b_error "fromJust: Nothing") id
+
+
+
+{- Timed constructors, destructor and instances -}
 
 b_notYet :: Behaviour (Timed a)
 b_notYet = primFunc "not_yet"
@@ -458,6 +526,10 @@ b_onTime = unOp "on_time"
 
 b_timed :: Behaviour b -> (Behaviour a -> Behaviour b) -> Behaviour (Timed a) -> Behaviour b
 b_timed def f = terOp "timed" def (cb $ haskToBhv f)
+
+instance BFunctor Timed where
+        b_fmap f = binOp "timed_fmap" (cb $ haskToBhv f)
+
 
 
 
@@ -686,35 +758,12 @@ x ~>= y = b_not (x ~< y)
 b_length :: BehaviourFun a [b] -> BehaviourFun a Int
 b_length = unOp "length"
 
-b_fromJust :: Behaviour (Maybe b) -> Behaviour b
-b_fromJust = b_maybe (b_error "fromJust: Nothing") id
-
 b_lookup' :: (BhvValue a, BhvValue b) => BehaviourFun (a, [(a, b)]) (Maybe b)
 b_lookup' = primFunc "lookup"
 b_lookup = bcurry b_lookup'
 
-b_not :: Behaviour Bool -> Behaviour Bool
-b_not = b_bool b_false b_true
-
-(~&&) :: Behaviour Bool -> Behaviour Bool -> Behaviour Bool
-x ~&& y = b_bool y x x
-
-(~==) :: Behaviour String -> Behaviour String -> Behaviour Bool
-(~==) = binOp "eq_string"
-
-b_fmap :: (Behaviour a -> Behaviour b) -> (Behaviour (Maybe a)) -> (Behaviour (Maybe b))
-b_fmap f = b_maybe b_nothing (b_just . f)
-
-b_join :: Behaviour (Maybe (Maybe a)) -> Behaviour (Maybe a)
-b_join = b_maybe b_nothing id
-
-b_return :: Behaviour a -> Behaviour (Maybe a)
-b_return = b_just
-
-(~>>=) :: Behaviour (Maybe a) -> (Behaviour a -> Behaviour (Maybe b)) -> Behaviour (Maybe b)
-x ~>>= f = b_maybe b_nothing f x
-
-b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
+instance BEq String where
+        (~==) = binOp "eq_string"
 
 
 
