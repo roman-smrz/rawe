@@ -92,6 +92,9 @@ instance (BhvValue a) => BhvValue (Timed a) where
         bhvValue NotYet = return.RawJS $ "{NotYet:null}"
         -}
 
+instance BhvValue JSString where
+        bhvValue str = return.RawJS $ "'"++escapeStringJS (fromJSString str)++"'"
+
 
 escapeStringJS = (>>=helper)
         where helper '\n' = "\\n"
@@ -375,6 +378,10 @@ instance ToHtmlBehaviour Int where
 instance ToHtmlBehaviour String where
         toHtml = unOp "to_html_string"
 
+instance ToHtmlBehaviour JSString where
+        toHtml = unOp "to_html_jsstring"
+
+
 instance ToHtmlBehaviour a => ToHtmlBehaviour (Maybe a) where
         toHtml = b_maybe (cb $ div $ return ()) toHtml
 
@@ -529,6 +536,45 @@ b_timed def f = terOp "timed" def (cb $ haskToBhv f)
 
 instance BFunctor Timed where
         b_fmap f = binOp "timed_fmap" (cb $ haskToBhv f)
+
+
+{- Result constructors and destructor -}
+
+b_result_ok :: Behaviour a -> Behaviour (Result a)
+b_result_ok = unOp "result_ok"
+
+b_result_error :: Behaviour String -> Behaviour (Result a)
+b_result_error = unOp "result_error"
+
+b_result :: (Behaviour String -> Behaviour b) -> (Behaviour a -> Behaviour b) -> Behaviour (Result a) -> Behaviour b
+b_result a b = terOp "result" (cb $ haskToBhv a) (cb $ haskToBhv b)
+
+
+{- JSON types, functions and instances -}
+
+class BJSON a where
+        b_readJSON :: Behaviour JSValue -> Behaviour (Result a)
+        b_writeJSON :: Behaviour a -> Behaviour JSValue
+
+
+b_toJSString :: Behaviour String -> Behaviour JSString
+b_toJSString = unOp "to_js_string"
+
+b_fromJSString :: Behaviour JSString -> Behaviour String
+b_fromJSString = unOp "from_js_string"
+
+instance BEq JSString where
+        (~==) = binOp "eq"
+
+
+b_toJSObject' :: Behaviour [(JSString, a)] -> Behaviour (JSObject a)
+b_toJSObject' = unOp "to_js_object"
+
+b_fromJSObject' :: Behaviour (JSObject a) -> Behaviour [(JSString, a)]
+b_fromJSObject' = unOp "from_js_object"
+
+instance BFunctor JSObject where
+        b_fmap f = binOp "js_object_fmap" (cb $ haskToBhv f)
 
 
 

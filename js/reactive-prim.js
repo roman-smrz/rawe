@@ -255,6 +255,13 @@ function r_prim_to_html_string() {
         };
 }
 
+function r_prim_to_html_jsstring() {
+	this.compute = function(x) {
+		// TODO: escape the string
+		return cthunk($('<span>'+x+'</span>'));
+	};
+}
+
 function r_prim_until() {
         this.compute = function(params) { return new Thunk(function() {
                 var def = params.get()[0];
@@ -264,6 +271,75 @@ function r_prim_until() {
                         return unt.get().Just.get();
                 return def.get();
         }); };
+}
+
+
+/* JSON interface */
+
+function r_prim_to_js_string() {
+	this.compute = function(cur) {
+		var result = '';
+		while (typeof cur.get().cons != 'undefined') {
+			result += cur.get().cons[0].get();
+			cur = cur.get().cons[1];
+		}
+		return result;
+	};
+}
+
+function r_prim_from_js_string() {
+	this.unboxed_param = true;
+	this.compute = function(str) { return new Thunk(function() {
+		var end = { nil: [] };
+		var result = end;
+
+		for (i in str) {
+			newend = { nil: [] };
+			delete end.nil;
+			end.cons = [ cthunk(str[i]), cthunk(newend) ];
+			end = newend;
+		}
+		return result;
+	}); };
+}
+
+function r_prim_to_js_object() {
+	this.compute = function(cur) {
+		var result = {};
+		while (typeof cur.get().cons != 'undefined') {
+			result[cur.get().cons[0].get()[0]] =
+				cur.get().cons[1].get()[1];
+			cur = cur.get().cons[1];
+		}
+		return result;
+	};
+}
+
+function r_prim_from_js_object() {
+	this.unboxed_param = true;
+	this.compute = function(obj) { return new Thunk(function() {
+		var end = { nil: [] };
+		var result = end;
+
+		for (i in obj) {
+			newend = { nil: [] };
+			delete end.nil;
+			end.cons = [ cthunk([i, obj[i]]), cthunk(newend) ];
+			end = newend;
+		}
+		return result;
+	}); };
+}
+
+function r_prim_js_object_fmap() {
+	this.compute = function(params, env) {
+		var f = params.get()[0].get();
+		var obj = params.get()[1];
+
+		var result = {};
+		for (i in obj) result[i] = f.compute(obj[i], env);
+		return result;
+	};
 }
 
 
@@ -343,4 +419,29 @@ function r_prim_timed_fmap() {
                         return { Timed: [ x.get().Timed[0], f.get().compute(x.get().Timed[1], env) ] };
                 return x.get();
         }); };
+}
+
+
+/* Result constructors and destructor */
+
+function r_prim_result_error() {
+	this.compute = function(x) { return cthunk({ Error: [x] }); };
+}
+
+function r_prim_result_ok() {
+	this.compute = function(x) { return cthunk({ Ok: [x] }); };
+}
+
+function r_prim_result() {
+	this.compute_unbox = function(params, env) {
+		var value = params.get()[1].get()[1].get();
+		for (i in value) {
+			var func;
+			switch (i) {
+				case 'Error': func = params.get()[0];
+				case 'Ok': func = params.get()[1].get()[0];
+			}
+			return func.get().compute(value[i][0], env);
+		}
+	};
 }
