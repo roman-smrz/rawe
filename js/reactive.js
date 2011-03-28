@@ -41,6 +41,7 @@ function Behaviour(id) {
         this.rdepend = {};
         this.valid = true;
         this.last_change = 0;
+        this.unboxed_param = false;
 
         /*
         this.change = function(value) {
@@ -57,8 +58,13 @@ function Behaviour(id) {
         }
         */
 
-        this.compute = function(x) {
+        this.compute = function(x, env, unbox) {
                 var b = this;
+		if (b.compute_unbox) {
+			if (unbox) return b.compute_unbox(x, env);
+			return new Thunk(function() { return b.compute_unbox(x, env).get(); });
+		}
+
                 return new Thunk(function() { return b.compute_(x.get()) });
         }
 

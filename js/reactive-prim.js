@@ -46,9 +46,10 @@ function r_prim_compose(f, g) {
         this.depend[f.get().id] = true;
         this.depend[g.get().id] = true;
 
-        this.compute = function(x, env) {
-                return g.get().compute(f.get().compute(x, env), env);
-        };
+	this.compute = function(x, env, unboxed) {
+		var y = f.get().compute(x, env, g.get().unboxed_param);
+		return g.get().compute(y, env, unboxed);
+	};
 }
 
 // a -> BehaviourFun b a
@@ -99,12 +100,6 @@ function r_prim_eq_string() {
 
 function r_prim_error() {
         this.compute_ = function(msg) { alert(msg); };
-}
-
-function r_prim_fst() {
-        this.compute = function(x) { return new Thunk(function() {
-                return x.get()[0].get();
-        }); }
 }
 
 function r_prim_gen() {
@@ -179,6 +174,14 @@ function r_prim_plus_mb() {
         }
 }
 
+function r_prim_fst() {
+	this.compute_unbox = function(x) { return x.get()[0]; }
+}
+
+function r_prim_snd() {
+	this.compute_unbox = function(x) { return x.get()[1]; }
+}
+
 function r_prim_product(f, g) {
         this.depend[f.get().id] = true;
         this.depend[g.get().id] = true;
@@ -239,12 +242,6 @@ function r_prim_spost(name) {
         }); };
 }
 
-function r_prim_snd() {
-        this.compute = function(x) { return new Thunk(function() {
-                return x.get()[1].get();
-        }); }
-}
-
 function r_prim_to_html_int() {
         this.compute_ = function(x) {
                 return $('<span>'+x+'</span>');
@@ -282,13 +279,13 @@ function r_prim_false() {
 }
 
 function r_prim_bool() {
-        this.compute = function(params) { return new Thunk(function() {
+	this.compute_unbox = function(params) {
                 var t = params.get()[0];
                 var f = params.get()[1].get()[0];
                 var c = params.get()[1].get()[1];
-                if (c.get()) return t.get();
-                return f.get();
-        }); };
+		if (c.get()) return t;
+		return f;
+	};
 }
 
 
@@ -303,15 +300,15 @@ function r_prim_just() {
 }
 
 function r_prim_maybe() {
-        this.compute = function(params, env) { return new Thunk(function() {
+	this.compute_unbox = function(params, env) {
                 var def = params.get()[0];
                 var func = params.get()[1].get()[0];
                 var mb = params.get()[1].get()[1];
 
                 if (typeof mb.get().Just == 'undefined')
-                        return def.get();
-                return func.get().compute(mb.get().Just, env).get();
-        }); };
+			return def;
+		return func.get().compute(mb.get().Just, env);
+	};
 }
 
 
@@ -326,15 +323,15 @@ function r_prim_on_time() {
 }
 
 function r_prim_timed() {
-        this.compute = function(params, env) { return new Thunk(function() {
+	this.compute_unbox = function(params, env) {
                 var not_yet = params.get()[0];
                 var on_time = params.get()[1].get()[0];
                 var value = params.get()[1].get()[1];
 
                 if (typeof value.get().Timed == 'undefined')
-                        return not_yet.get();
-                return on_time.get().compute(value.get().Timed[1], env).get();
-        }); };
+			return not_yet;
+		return on_time.get().compute(value.get().Timed[1], env);
+	};
 }
 
 function r_prim_timed_fmap() {
