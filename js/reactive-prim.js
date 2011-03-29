@@ -1,4 +1,8 @@
 
+function r_prim_id() {
+	this.compute = function(x) { return x; }
+}
+
 function r_prim_add_attr() {
         this.compute_ = function(params) {
                 var name, value;

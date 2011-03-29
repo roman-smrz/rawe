@@ -222,7 +222,7 @@ addBehaviour b = do
                      return nid
 
              Assigned id -> return id
-             BhvID -> return (-1)
+             BhvID -> return 0
 
 
 instance BhvValue (BehaviourFun a b) where
@@ -825,7 +825,7 @@ type RenderMonad a = Writer String a
 
 render :: Html -> String
 render html = let (HtmlM f) = renderH html
-                  ((result, ()), _) = f (HtmlState 1 [] [])
+                  ((result, ()), _) = f (HtmlState 1 [(0, "id", [])] [])
                in result
 --render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "")
 
