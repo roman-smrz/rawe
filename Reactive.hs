@@ -467,6 +467,10 @@ b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
 
 instance BEq Int where (~==) = binOp "eq"
 
+instance BJSON Int where
+        b_readJSON x = b_ite (b_typeof x ~== "number") (b_result_ok $ b_unsafeBox x) (b_result_error "readJSON: not a number")
+        b_writeJSON = b_unsafeUnbox
+
 
 {- Char instances -}
 
