@@ -673,6 +673,12 @@ b_unsafeUnbox = unOp "unbox"
 b_unsafeCoerce :: Behaviour a -> Behaviour b
 b_unsafeCoerce = (.) (Assigned 0)
 
+b_typeof' :: Behaviour JSValue -> Behaviour JSString
+b_typeof' = unOp "typeof"
+
+b_typeof :: Behaviour JSValue -> Behaviour String
+b_typeof = b_fromJSString . b_typeof'
+
 
 
 

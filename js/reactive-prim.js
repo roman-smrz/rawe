@@ -236,6 +236,10 @@ function r_prim_to_html_jsstring() {
 	};
 }
 
+function r_prim_typeof() {
+	this.compute = function(x) { return typeof x; }
+}
+
 function r_prim_until() {
         this.compute = function(params) { return new Thunk(function() {
                 var def = params.get()[0];
