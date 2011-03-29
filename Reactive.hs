@@ -40,12 +40,6 @@ instance IsString RawJS where fromString = RawJS
 
 class BhvValue a where
         bhvValue :: a -> HtmlM RawJS
-        bhvValueList :: [a] -> HtmlM RawJS
-        bhvValueList = return.RawJS.("cthunk(["++).(++"])") . drop 1 . concat <=<
-                        mapM (return.(',':).(\(RawJS x)->x) <=< bhvValue)
-
-instance (BhvValue a) => BhvValue [a] where
-        bhvValue = bhvValueList
 
 instance BhvValue () where bhvValue () = return "cthunk([])"
 instance BhvValue Int where bhvValue x = return.RawJS $ "cthunk("++show x++")"
@@ -78,7 +72,6 @@ jsHtml html = do
 
 instance BhvValue Char where
         bhvValue x = return.RawJS $ "cthunk("++show x++")"
-        bhvValueList x = return.RawJS $ "cthunk("++show x++")"
 
 instance (BhvValue a, BhvValue b) => BhvValue (a, b) where
         bhvValue (x,y) = do
@@ -90,8 +83,15 @@ instance (BhvValue a) => BhvValue (Maybe a) where
                                return.RawJS $ "cthunk({Just:"++jx++"})"
         bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
 
+instance BhvValue a => BhvValue [a] where
+        bhvValue [] = return.RawJS $ "cthunk({nil:[]})"
+        bhvValue (x:xs) = do RawJS jx <- bhvValue x
+                             RawJS jxs <- bhvValue xs
+                             return.RawJS $ "cthunk({cons:["++jx++","++jxs++"]})"
+
 {-
 instance (BhvValue a) => BhvValue (Timed a) where
+        bhvValue _ = error "Time is a phantom type"
         bhvValue (Timed t x) = do (RawJS jt) <- bhvValue t
                                   (RawJS jx) <- bhvValue x
                                   return.RawJS $ "{Timed:["++jt++","++jx++"]}"
@@ -168,7 +168,7 @@ class BehaviourPrim f a b | f -> a b where
 
 
 
-data BhvServer a b = BhvServer String String
+data BhvServer a b = BhvServer String JSString
 instance BehaviourPrim (BhvServer a b) a b where
         bhvPrim (BhvServer func name) = do
                 jname <- bhvValue name
@@ -194,12 +194,11 @@ eitherToResult (Right x) = Ok x
 eitherToResult (Left e) = Error e
 -}
 
-sget :: (JSON a, JSON b) => String -> BehaviourFun a (Maybe b)
-sget = Prim . BhvServer "sget"
+sget' :: String -> Behaviour (Maybe JSValue)
+sget' = Prim . BhvServer "sget" . toJSString
 
-spost :: (JSON a) => String -> Behaviour (Timed [(String, String)]) -> Behaviour (Maybe a)
-spost name = (.) (Prim $ BhvServer "spost" name)
-
+sget :: BJSON a => String -> Behaviour (Maybe a)
+sget = b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON) . sget'
 
 
 
@@ -362,7 +361,7 @@ src = AttrVal "src"
 style = AttrVal "style"
 
 
-input :: HtmlM (Behaviour String)
+input :: HtmlM (Behaviour a)
 input = do
         bid <- htmlUniq
         addBehaviour' bid "gen" []
@@ -382,7 +381,7 @@ instance ToHtmlBehaviour Int where
         toHtml = unOp "to_html_int"
 
 instance ToHtmlBehaviour String where
-        toHtml = unOp "to_html_string"
+        toHtml = toHtml . b_toJSString
 
 instance ToHtmlBehaviour JSString where
         toHtml = unOp "to_html_jsstring"
@@ -500,6 +499,80 @@ x ~&& y = b_bool y x x
 x ~|| y = b_bool x y x
 
 
+{- Tuple instances -}
+
+instance BFunctor ((,) a) where
+        b_fmap f x = (fst . x) &&& f (snd . x)
+
+
+{- List constructors, destructor, instances and functions -}
+
+b_nil :: Behaviour [a]
+b_nil = primFunc "nil"
+
+(~:) :: Behaviour a -> Behaviour [a] -> Behaviour [a]
+(~:) = binOp "cons"
+infixr 5 ~:
+
+b_list :: Behaviour b -> (Behaviour a -> Behaviour [a] -> Behaviour b) -> Behaviour [a] -> Behaviour b
+b_list n c = terOp "list" n (cb $ haskToBhv $ b_uncurry c)
+
+instance BEq a => BEq [a] where
+        (~==) = bfix $ (\z -> \xs ys -> b_list (b_null ys) (\x xs' -> b_list b_false (\y ys' -> (x ~== y) ~&& z xs' ys') ys) xs)
+
+instance BFunctor [] where
+        b_fmap = b_map
+
+instance BMonad [] where
+        b_return = (~:b_nil)
+        b_join = b_concat
+
+(~++) :: Behaviour [a] -> Behaviour [a] -> Behaviour [a]
+xs ~++ ys = bfix (\f -> b_list ys (\x xs' -> x ~: f xs')) xs
+
+b_head :: Behaviour [a] -> Behaviour a
+b_head = b_list (b_error "Reactive.head") (\x _ -> x)
+
+b_tail :: Behaviour [a] -> Behaviour [a]
+b_tail = b_list (b_error "Reactive.tail") (\_ xs -> xs)
+
+b_null :: Behaviour [a] -> Behaviour Bool
+b_null = b_list b_true (\_ _ -> b_false)
+
+b_length :: Behaviour [b] -> Behaviour Int
+b_length = bfix (\f -> b_list 0 (\_ xs -> 1 + f xs))
+
+b_map :: (Behaviour a -> Behaviour b) -> Behaviour [a] -> Behaviour [b]
+b_map f = bfix (\m -> b_list b_nil (\x xs -> f x ~: m xs))
+
+b_foldl :: (Behaviour a -> Behaviour b -> Behaviour a) -> Behaviour a -> Behaviour [b] -> Behaviour a
+b_foldl f = bfix (\fld -> \z -> b_list z (\x xs -> fld (f z x) xs))
+
+b_foldr :: (Behaviour a -> Behaviour b -> Behaviour b) -> Behaviour b -> Behaviour [a] -> Behaviour b
+b_foldr f z = bfix (\fld -> b_list z (\x xs -> x `f` fld xs))
+
+b_concat :: Behaviour [[a]] -> Behaviour [a]
+b_concat = b_foldr (~++) b_nil
+
+b_and :: Behaviour [Bool] -> Behaviour Bool
+b_and = b_foldr (~&&) b_true
+
+b_or :: Behaviour [Bool] -> Behaviour Bool
+b_or = b_foldr (~||) b_false
+
+b_all :: (Behaviour a -> Behaviour Bool) -> Behaviour [a] -> Behaviour Bool
+b_all f = b_and . b_map f
+
+b_lookup :: (BEq a) => Behaviour a -> Behaviour [(a,b)] -> Behaviour (Maybe b)
+b_lookup k = bfix $ \f -> b_list b_nothing $ \x xs -> flip b_uncurry x $ \k' v -> b_ite (k'~==k) (b_just v) (f xs)
+
+b_zip :: Behaviour [a] -> Behaviour [b] -> Behaviour [(a, b)]
+b_zip = b_zipWith (&&&)
+
+b_zipWith :: (Behaviour a -> Behaviour b -> Behaviour c) -> Behaviour [a] -> Behaviour [b] -> Behaviour [c]
+b_zipWith f = bfix $ (\z -> \xs ys -> b_list b_nil (\x xs' -> b_list b_nil (\y ys' -> f x y ~: z xs' ys') ys) xs)
+
+
 {- Maybe constructors, destructor, instances and functions -}
 
 b_nothing :: Behaviour (Maybe a)
@@ -576,8 +649,14 @@ instance BEq JSString where
 b_toJSObject' :: Behaviour [(JSString, a)] -> Behaviour (JSObject a)
 b_toJSObject' = unOp "to_js_object"
 
+b_toJSObject :: Behaviour [(String, a)] -> Behaviour (JSObject a)
+b_toJSObject = b_toJSObject' . b_map (\x -> b_toJSString (fst . x) &&& (snd . x))
+
 b_fromJSObject' :: Behaviour (JSObject a) -> Behaviour [(JSString, a)]
 b_fromJSObject' = unOp "from_js_object"
+
+b_fromJSObject :: Behaviour (JSObject a) -> Behaviour [(String, a)]
+b_fromJSObject = b_map (\x -> b_fromJSString (fst . x) &&& (snd . x)) . b_fromJSObject'
 
 instance BFunctor JSObject where
         b_fmap f = binOp "js_object_fmap" (cb $ haskToBhv f)
@@ -748,9 +827,13 @@ page = html $ do
 
                 return ()
 
-post :: (JSON a, JSON b) => String -> Behaviour (Timed a) -> HtmlM (Behaviour (Maybe b))
-post name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" name) . x
-                 HtmlM $ \s -> (Assigned id, ([], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
+post' :: String -> Behaviour (Timed (JSObject JSString)) -> HtmlM (Behaviour (Maybe JSValue))
+post' name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
+                  HtmlM $ \s -> (Assigned id, ([], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
+
+post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Behaviour (Maybe a))
+post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
+        post' name . b_fmap (b_toJSObject . b_fmap (b_fmap b_toJSString))
 
 bstr :: String -> Behaviour Html
 bstr = fromString
@@ -789,8 +872,11 @@ instance IsString (Behaviour String) where
         fromString = cb
 
 
+b_error' :: Behaviour JSString -> Behaviour a
+b_error' = unOp "error"
+
 b_error :: Behaviour String -> Behaviour a
-b_error = unOp "error"
+b_error = b_error' . b_toJSString
 
 b_undefined = b_error "undefined"
 
@@ -798,36 +884,32 @@ b_guardTimed :: (Behaviour a -> Behaviour Bool) -> Behaviour (Timed a) -> Behavi
 b_guardTimed f tx = b_ite (b_timed b_false f tx) tx b_notYet
 
 
-form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
-form (HtmlM f) = do
+form' :: HtmlM a -> HtmlM (Behaviour (Timed (JSObject JSString)))
+form' (HtmlM f) = do
         bid <- htmlUniq
         addBehaviour' bid "gen" []
         HtmlM $ \s -> let (_, (content, s')) = f s
                        in (Assigned bid, ([Tag "form" [AttrVal "bhv-gen" (show bid)] content], s'))
 
+form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
+form = fmap (b_fmap (b_fromJSObject . b_fmap b_fromJSString)) . form'
+
 t2m :: Behaviour (Timed a) -> Behaviour (Maybe a)
 t2m = b_timed b_nothing b_just
 
-textfield :: String -> HtmlM (Behaviour String)
-textfield n = input ! type_ "text" ! name n
+textfield' :: String -> HtmlM (Behaviour JSString)
+textfield' n = input ! type_ "text" ! name n
 
-submit :: HtmlM (Behaviour String)
+textfield :: String -> HtmlM (Behaviour String)
+textfield = fmap b_fromJSString . textfield'
+
+submit :: HtmlM (Behaviour (Timed String))
 submit = input ! type_ "submit"
 
 (~<) :: BehaviourFun a Int -> BehaviourFun a Int -> BehaviourFun a Bool
 (~<) = binOp "lt_int"
 
 x ~>= y = b_not (x ~< y)
-
-b_length :: BehaviourFun a [b] -> BehaviourFun a Int
-b_length = unOp "length"
-
-b_lookup' :: (BhvValue a, BhvValue b) => BehaviourFun (a, [(a, b)]) (Maybe b)
-b_lookup' = primFunc "lookup"
-b_lookup = bcurry b_lookup'
-
-instance BEq String where
-        (~==) = binOp "eq_string"
 
 
 

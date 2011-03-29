@@ -112,7 +112,7 @@ function r_prim_gen() {
         };
 
         this.change = function(value) {
-                this.value = cthunk(value);
+		this.value = value;
                 r_current_time++;
                 this.invalidate();
                 r_update_html();
@@ -139,24 +139,6 @@ function r_prim_hask_to_bhv(inner, func) {
 function r_prim_hask_to_bhv_inner() {
         this.compute = function(x, env) {
                 return env.h2b[this.id];
-        };
-}
-
-function r_prim_length() {
-        this.compute_ = function(list) {
-                return list.length;
-        }
-}
-
-function r_prim_lookup() {
-        this.compute_ = function(param) {
-                var key = param[0].get();
-                var list = param[1].get();
-                for (i in list) {
-                        if (list[i].get()[0].get() == key)
-                                return { Just: list[i].get()[1] };
-                }
-                return { Nothing: null };
         };
 }
 
@@ -201,11 +183,11 @@ function r_prim_sget(name) {
         this.compute_ = function(x) {
                 for (i in this.values) {
                         if (this.values[i][0] == x) {
-                                return { Just: cthunk( this.values[i][1] ) };
+				return { Just: this.values[i][1] };
                         }
                 }
 
-                $.get(document.location.href, { q: name.get() }, function(json) {
+		$.get(document.location.href, { q: name }, function(json) {
                         b.values.push([x, jQuery.parseJSON(json)]);
                         r_current_time++;
                         b.invalidate();
@@ -225,18 +207,13 @@ function r_prim_spost(name) {
                         return { Nothing: null };
 
                 var time = x.get().Timed[0];
-                var pairs = x.get().Timed[1].get();
-
                 if (typeof results[time] != 'undefined')
                         return results[time]
                 results[time] = { Nothing: null };
 
-                var params = {};
-                for (i in pairs)
-                        params[pairs[i].get()[0].get()] = pairs[i].get()[1].get();
-
-                $.post(document.location.href+'?q='+name.get(), params, function(json) {
-                        results[time] = { Just: cthunk( jQuery.parseJSON(json) ) };
+		$.post(document.location.href+'?q='+name, x.get().Timed[1], function(json) {
+			var x = jQuery.parseJSON(json);
+			results[time] = { Just: x };
                         r_current_time++;
                         b.invalidate();
                         r_update_html();
@@ -248,13 +225,6 @@ function r_prim_spost(name) {
 
 function r_prim_to_html_int() {
         this.compute_ = function(x) {
-                return $('<span>'+x+'</span>');
-        };
-}
-
-function r_prim_to_html_string() {
-        this.compute_ = function(x) {
-                // TODO: escape the string
                 return $('<span>'+x+'</span>');
         };
 }
@@ -376,6 +346,31 @@ function r_prim_bool() {
                 var c = params.get()[1].get()[1];
 		if (c.get()) return t;
 		return f;
+	};
+}
+
+
+/* List constructors and destructor */
+
+function r_prim_nil() {
+	this.compute = function() { return cthunk( { 'nil': [] }); };
+}
+
+function r_prim_cons() {
+	this.compute = function(x) { return cthunk( { 'cons': x.get() }); };
+}
+
+function r_prim_list() {
+	var b = this;
+	this.compute = function(params, env) {
+		var y1 = params.get()[0];
+		var y2 = params.get()[1].get()[0];
+		var x = params.get()[1].get()[1];
+
+		if (typeof x.get().nil != 'undefined')
+			return y1;
+		if (typeof x.get().cons != 'undefined')
+			return y2.get().compute(cthunk(x.get().cons), env);
 	};
 }
 

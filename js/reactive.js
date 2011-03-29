@@ -152,7 +152,7 @@ function r_update_html() {
                                 newNode.find('input:text').each(function() {
                                         var gen = $(this).attr('bhv-gen');
                                         if (gen && r_behaviours[gen].value)
-                                                $(this).val(r_behaviours[gen].value.get());
+						$(this).val(r_behaviours[gen].value);
                                 });
 
                                 for (i in r_init_html_funs) r_init_html_funs[i](newNode);
@@ -174,16 +174,16 @@ function r_init_gen(b, elem) {
                         b.value = cthunk({ NotYet: null });
                 elem.submit(function(e) {
                         e.preventDefault();
-                        var result = [];
-                        elem.find('input, select, textarea').each(function() {
-                                result.push(cthunk( [cthunk( $(this).attr('name') ), cthunk( $(this).val() )] ));
-                        });
-                        b.change({ Timed: [++r_current_time, cthunk( result )] });
+			var result = {};
+			elem.find('input, select, textarea').each(function() {
+				result[$(this).attr('name')] = $(this).val();
+			});
+			b.change(cthunk({ Timed: [++r_current_time, result] }));
                 });
         }
 
         if (elem.is('input:text')) {
-                b.value = cthunk( elem.val() );
+		b.value = elem.val();
                 elem.change(function(e) {
                         b.change(elem.val());
                 });
