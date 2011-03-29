@@ -278,6 +278,17 @@ function r_prim_until() {
 }
 
 
+/* Unsafe functions */
+
+function r_prim_box() {
+	this.compute = function(x) { return cthunk(x); }
+}
+
+function r_prim_unbox() {
+	this.compute = function(x) { return x.get(); }
+}
+
+
 /* JSON interface */
 
 function r_prim_to_js_string() {

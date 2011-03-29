@@ -583,6 +583,18 @@ instance BFunctor JSObject where
         b_fmap f = binOp "js_object_fmap" (cb $ haskToBhv f)
 
 
+{- Other functions -}
+
+b_unsafeBox :: Behaviour a -> Behaviour b
+b_unsafeBox = unOp "box"
+
+b_unsafeUnbox :: Behaviour a -> Behaviour b
+b_unsafeUnbox = unOp "unbox"
+
+b_unsafeCoerce :: Behaviour a -> Behaviour b
+b_unsafeCoerce = (.) (Assigned 0)
+
+
 
 
 data BhvEnumFromTo = BhvEnumFromTo
