@@ -60,9 +60,15 @@ instance BhvValue Attribute where
                 return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
 
 
-instance BhvValue (HtmlM a) where
+instance BhvValue Html where
         bhvValue html = do
-                (raw, _) <- renderH html
+                (raw, ()) <- renderH html
+                return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
+
+instance BhvValue (HtmlM (Behaviour a)) where
+        bhvValue html = do
+                rec (raw, b) <- renderH (html ! AttrVal "bhv-inner" (show bid))
+                    bid <- addBehaviour b
                 return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
 
 jsHtml :: HtmlM a -> HtmlM (RawJS, a)

@@ -21,7 +21,7 @@ function r_prim_bhv_to_html_inner(out) {
 
         this.compute = function(x, env) { return new Thunk(function() {
                 $('*[bhv-id='+out.get().id+']').each(function() {
-                        var gen = $(this).attr('bhv-gen');
+			var gen = $(this).attr('bhv-inner');
                         // TODO: some error message
                         if (!gen) return;
 
