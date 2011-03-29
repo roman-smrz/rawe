@@ -771,61 +771,6 @@ instance BehaviourToHtml (Behaviour a) where
 cb :: (BhvValue a) => a -> BehaviourFun b a
 cb x = Prim $ BhvConst x
 
-page = html $ do
-        head $ do
-                title "Catopsis"
-        body $ do
-                {-
-                let count = srvval "count" :: Behaviour Int
-                ul $ do
-                        let msg = srvval "msg" :: Behaviour String
-                        let msgs = srvval "msgs" :: Behaviour [String]
-
-                        li $ "polozka"
-                        bhv $ Prim li . Prim ToHtmlInt . count
-                        bhv $ Prim li . Prim ToHtmlString . msg
-                        bhv $ Prim ToHtmlHtmlList . bmap li . bmap ToHtmlString . msgs
-                        bhv $ Prim li . Prim ToHtmlInt . blength . msgs
-                        bhv $ Prim li . Prim ToHtmlString . Prim (BhvConst "aoeu")
-                        return ()
-
-                bhv $ Prim ToHtmlHtmlList . bmap (div ! style "display: inline; color: blue") . bmap ToHtmlInt . benumFromTo . (1 &&& count)
-                -}
-
-                let count = sget "count" :: Behaviour (Maybe Int)
-                let register = spost "register" :: Behaviour (Timed [(String,String)]) -> Behaviour (Maybe Int)
-
-                bhv $ bstr "Prvni"
-                br
-                bhv $ toHtml $ count + 2
-                br
-
-                rec result <- post "register" $ b_guardTimed checkForm $ formData
-                                :: HtmlM (Behaviour (Maybe Int))
-                    formData <- bhv $ (
-                        cb $ form $ do
-                                bhv $ bstr "Druhy"
-                                br
-                                name <- textfield "name"
-                                br
-                                textfield "pass" >> br
-                                bhv $ bstr "Heslo je prilis kratke" `displayIfNot`
-                                        b_timed b_true checkPassLen formData
-                                br
-                                textfield "pass-check" >> br
-                                bhv $ bstr "Hesla se neshoduji" `displayIfNot`
-                                        b_timed b_true checkPassMatch formData
-                                br
-                                bhv $ toHtml . b_join . b_fmap (b_lookup "name") $ t2m formData
-                                submit
-                                bhv $ toHtml name
-                        ) `b_until` (
-                        b_timed b_nothing (const (b_just $ bstr "Odesilani...")) $ b_guardTimed checkForm formData
-                        ) `b_until` (
-                        b_fmap toHtml result
-                        )
-
-                return ()
 
 post' :: String -> Behaviour (Timed (JSObject JSString)) -> HtmlM (Behaviour (Maybe JSValue))
 post' name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
@@ -835,25 +780,8 @@ post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Beh
 post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
         post' name . b_fmap (b_toJSObject . b_fmap (b_fmap b_toJSString))
 
-bstr :: String -> Behaviour Html
-bstr = fromString
-
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
-
-getVal name = b_fromJust . b_lookup name
-
-checkPassLen :: Behaviour [(String, String)] -> Behaviour Bool
-checkPassLen x = (b_length $ getVal "pass" x) ~>= 2
-
-checkPassMatch :: Behaviour [(String, String)] -> Behaviour Bool
-checkPassMatch x = getVal "pass" x ~== getVal "pass-check" x
-
-checkForm x = checkPassLen x ~&& checkPassMatch x
-
-displayIf :: (ToHtmlBehaviour a) => Behaviour a -> Behaviour Bool -> Behaviour Html
-displayIf what = toHtml . b_bool (b_just what) b_nothing
-displayIfNot what = displayIf what . b_not
 
 
 b_until :: Behaviour (HtmlM (Behaviour a)) -> Behaviour (Maybe Html) -> Behaviour (HtmlM (Behaviour a))
