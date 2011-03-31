@@ -617,8 +617,7 @@ b_onTime = unOp "on_time"
 b_timed :: Behaviour b -> (Behaviour a -> Behaviour b) -> Behaviour (Timed a) -> Behaviour b
 b_timed def f = terOp "timed" def (cb $ haskToBhv f)
 
-instance BFunctor Timed where
-        b_fmap f = binOp "timed_fmap" (cb $ haskToBhv f)
+b_unsafeMapTimed f = binOp "timed_map" (cb $ haskToBhv f)
 
 
 {- Result constructors and destructor -}
@@ -782,13 +781,21 @@ cb :: (BhvValue a) => a -> BehaviourFun b a
 cb x = Prim $ BhvConst x
 
 
+
+newBhv :: HtmlM (Behaviour a)
+newBhv = undefined
+
+(<--) :: Behaviour a -> HtmlM (Behaviour a) -> Html
+bhv <-- html = undefined
+
+
 post' :: String -> Behaviour (Timed (JSObject JSString)) -> HtmlM (Behaviour (Maybe JSValue))
 post' name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
                   HtmlM $ \s -> (Assigned id, ([], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
 
 post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Behaviour (Maybe a))
 post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
-        post' name . b_fmap (b_toJSObject . b_fmap (b_fmap b_toJSString))
+        post' name . b_unsafeMapTimed (b_toJSObject . b_fmap (b_fmap b_toJSString))
 
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
@@ -830,7 +837,7 @@ form' (HtmlM f) = do
                        in (Assigned bid, ([Tag "form" [AttrVal "bhv-gen" (show bid)] content], s'))
 
 form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
-form = fmap (b_fmap (b_fromJSObject . b_fmap b_fromJSString)) . form'
+form = fmap (b_unsafeMapTimed (b_fromJSObject . b_fmap b_fromJSString)) . form'
 
 t2m :: Behaviour (Timed a) -> Behaviour (Maybe a)
 t2m = b_timed b_nothing b_just

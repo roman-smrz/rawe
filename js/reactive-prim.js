@@ -424,7 +424,7 @@ function r_prim_timed() {
 	};
 }
 
-function r_prim_timed_fmap() {
+function r_prim_timed_map() {
         this.compute = function(params, env) { return new Thunk(function() {
                 var f = params.get()[0];
                 var x = params.get()[1];
