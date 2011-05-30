@@ -297,7 +297,7 @@ function r_prim_to_js_object() {
 		var result = {};
 		while (typeof cur.get().cons != 'undefined') {
 			result[cur.get().cons[0].get()[0]] =
-				cur.get().cons[1].get()[1];
+				cur.get().cons[0].get()[1];
 			cur = cur.get().cons[1];
 		}
 		return result;
