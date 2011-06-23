@@ -41,7 +41,6 @@ function Behaviour(id) {
         this.rdepend = {};
         this.valid = true;
         this.last_change = 0;
-        this.unboxed_param = false;
 
         /*
         this.change = function(value) {
@@ -58,10 +57,9 @@ function Behaviour(id) {
         }
         */
 
-        this.compute = function(x, env, unbox) {
+	this.compute = function(x, env) {
                 var b = this;
 		if (b.compute_unbox) {
-			if (unbox) return b.compute_unbox(x, env);
 			return new Thunk(function() { return b.compute_unbox(x, env).get(); });
 		}
 
@@ -152,7 +150,7 @@ function r_update_html() {
                                 newNode.find('input:text').each(function() {
                                         var gen = $(this).attr('bhv-gen');
                                         if (gen && r_behaviours[gen].value)
-						$(this).val(r_behaviours[gen].value);
+						$(this).val(r_behaviours[gen].value.get());
                                 });
 
                                 for (i in r_init_html_funs) r_init_html_funs[i](newNode);
@@ -176,19 +174,19 @@ function r_init_gen(b, elem) {
                         e.preventDefault();
 			var result = {};
 			elem.find('input, select, textarea').each(function() {
-				result[$(this).attr('name')] = $(this).val();
+				result[$(this).attr('name')] = cthunk( $(this).val() );
 			});
-			b.change(cthunk({ Timed: [++r_current_time, result] }));
+			b.change(cthunk({ Timed: [++r_current_time, cthunk(result)] }));
                 });
         }
 
         if (elem.is('input:text')) {
-		b.value = elem.val();
+		b.value = cthunk(elem.val());
                 elem.change(function(e) {
-                        b.change(elem.val());
+			b.change(cthunk(elem.val()));
                 });
                 elem.keyup(function(e) {
-                        b.change(elem.val());
+			b.change(cthunk(elem.val()));
                 });
         }
 }

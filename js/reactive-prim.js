@@ -50,9 +50,9 @@ function r_prim_compose(f, g) {
         this.depend[f.get().id] = true;
         this.depend[g.get().id] = true;
 
-	this.compute = function(x, env, unboxed) {
-		var y = f.get().compute(x, env, g.get().unboxed_param);
-		return g.get().compute(y, env, unboxed);
+	this.compute = function(x, env) {
+		var y = f.get().compute(x, env);
+		return g.get().compute(y, env);
 	};
 }
 
@@ -183,11 +183,11 @@ function r_prim_sget(name) {
         this.compute_ = function(x) {
                 for (i in this.values) {
                         if (this.values[i][0] == x) {
-				return { Just: this.values[i][1] };
+				return { Just: cthunk( this.values[i][1] ) };
                         }
                 }
 
-		$.get(document.location.href, { q: name }, function(json) {
+		$.get(document.location.href, { q: name.get() }, function(json) {
                         b.values.push([x, jQuery.parseJSON(json)]);
                         r_current_time++;
                         b.invalidate();
@@ -211,9 +211,13 @@ function r_prim_spost(name) {
                         return results[time]
                 results[time] = { Nothing: null };
 
-		$.post(document.location.href+'?q='+name, x.get().Timed[1], function(json) {
+		var obj = x.get().Timed[1].get();
+		var post = {};
+		for (i in obj) post[i] = obj[i].get();
+
+		$.post(document.location.href+'?q='+name.get(), post, function(json) {
 			var x = jQuery.parseJSON(json);
-			results[time] = { Just: x };
+			results[time] = { Just: cthunk(x) };
                         r_current_time++;
                         b.invalidate();
                         r_update_html();
@@ -230,14 +234,14 @@ function r_prim_to_html_int() {
 }
 
 function r_prim_to_html_jsstring() {
-	this.compute = function(x) {
+	this.compute_ = function(x) {
 		// TODO: escape the string
-		return cthunk($('<span>'+x+'</span>'));
+		return $('<span>'+x+'</span>');
 	};
 }
 
 function r_prim_typeof() {
-	this.compute = function(x) { return typeof x; }
+	this.compute_ = function(x) { return typeof x; }
 }
 
 function r_prim_until() {
@@ -266,19 +270,19 @@ function r_prim_unbox() {
 /* JSON interface */
 
 function r_prim_to_js_string() {
-	this.compute = function(cur) {
+	this.compute = function(cur) { return new Thunk(function() {
 		var result = '';
 		while (typeof cur.get().cons != 'undefined') {
 			result += cur.get().cons[0].get();
 			cur = cur.get().cons[1];
 		}
 		return result;
-	};
+	}); };
 }
 
 function r_prim_from_js_string() {
-	this.unboxed_param = true;
 	this.compute = function(str) { return new Thunk(function() {
+		str = str.get();
 		var end = { nil: [] };
 		var result = end;
 
@@ -293,27 +297,27 @@ function r_prim_from_js_string() {
 }
 
 function r_prim_to_js_object() {
-	this.compute = function(cur) {
+	this.compute = function(cur) { return new Thunk(function() {
 		var result = {};
 		while (typeof cur.get().cons != 'undefined') {
-			result[cur.get().cons[0].get()[0]] =
+			result[cur.get().cons[0].get()[0].get()] =
 				cur.get().cons[0].get()[1];
 			cur = cur.get().cons[1];
 		}
 		return result;
-	};
+	}); };
 }
 
 function r_prim_from_js_object() {
-	this.unboxed_param = true;
 	this.compute = function(obj) { return new Thunk(function() {
+		obj = obj.get();
 		var end = { nil: [] };
 		var result = end;
 
 		for (i in obj) {
 			newend = { nil: [] };
 			delete end.nil;
-			end.cons = [ cthunk([i, obj[i]]), cthunk(newend) ];
+			end.cons = [ cthunk([cthunk(i), obj[i]]), cthunk(newend) ];
 			end = newend;
 		}
 		return result;
@@ -321,14 +325,14 @@ function r_prim_from_js_object() {
 }
 
 function r_prim_js_object_fmap() {
-	this.compute = function(params, env) {
+	this.compute = function(params, env) { return new Thunk(function() {
 		var f = params.get()[0].get();
-		var obj = params.get()[1];
+		var obj = params.get()[1].get();
 
 		var result = {};
 		for (i in obj) result[i] = f.compute(obj[i], env);
 		return result;
-	};
+	}); };
 }
 
 

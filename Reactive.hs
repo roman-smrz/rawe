@@ -99,7 +99,7 @@ instance (BhvValue a) => BhvValue (Timed a) where
         -}
 
 instance BhvValue JSString where
-        bhvValue str = return.RawJS $ "'"++escapeStringJS (fromJSString str)++"'"
+        bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (fromJSString str)++"')"
 
 
 escapeStringJS = (>>=helper)
@@ -468,8 +468,8 @@ b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
 instance BEq Int where (~==) = binOp "eq"
 
 instance BJSON Int where
-        b_readJSON x = b_ite (b_typeof x ~== "number") (b_result_ok $ b_unsafeBox x) (b_result_error "readJSON: not a number")
-        b_writeJSON = b_unsafeUnbox
+        b_readJSON x = b_ite (b_typeof x ~== "number") (b_result_ok $ b_unsafeCoerce x) (b_result_error "readJSON: not a number")
+        b_writeJSON = b_unsafeCoerce
 
 
 {- Char instances -}
@@ -666,12 +666,6 @@ instance BFunctor JSObject where
 
 
 {- Other functions -}
-
-b_unsafeBox :: Behaviour a -> Behaviour b
-b_unsafeBox = unOp "box"
-
-b_unsafeUnbox :: Behaviour a -> Behaviour b
-b_unsafeUnbox = unOp "unbox"
 
 b_unsafeCoerce :: Behaviour a -> Behaviour b
 b_unsafeCoerce = (.) (Assigned 0)
