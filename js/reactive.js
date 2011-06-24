@@ -6,7 +6,7 @@ var r_event_deps = {};
 var r_cur_bhv = null;
 
 
-var r_behaviours = {};
+var r_bhv_fun = {};
 var r_invalid_html = [];
 var r_current_time = 0;
 var r_init_html_funs = [];
@@ -35,7 +35,7 @@ function cthunk(x) {
 }
 
 
-function Behaviour(id) {
+function BhvFun(id) {
         this.id = id;
         this.depend = {};
         this.rdepend = {};
@@ -52,7 +52,7 @@ function Behaviour(id) {
                 this.valid = true;
 
                 for (i in r_invalid)
-                        r_behaviours[r_invalid[i]].recompute();
+			r_bhv_fun[r_invalid[i]].recompute();
                 r_invalid = [];
         }
         */
@@ -78,7 +78,7 @@ function Behaviour(id) {
                 }
 
                 for (i in this.rdepend)
-                        r_behaviours[i].invalidate();
+			r_bhv_fun[i].invalidate();
         }
 
         /*
@@ -86,7 +86,7 @@ function Behaviour(id) {
                 if (this.valid) return;
 
                 if (i in this.depend)
-                        r_behaviours[i].recompute();
+			r_bhv_fun[i].recompute();
                 this.value = this.compute();
                 this.valid = true;
         }
@@ -98,29 +98,29 @@ function r_init() {
         $(document).ready(function() {
                 r_init_html_funs.push(function(elems) {
                         elems.find('*[bhv-id]').each(function() {
-                                r_invalid_html.push(r_behaviours[$(this).attr('bhv-id')]);
+				r_invalid_html.push(r_bhv_fun[$(this).attr('bhv-id')]);
                         });
                         elems.add(elems.find('*[bhv-gen]')).filter('*[bhv-gen]').each(function() {
-                                r_init_gen(r_behaviours[$(this).attr('bhv-gen')], $(this));
+				r_init_gen(r_bhv_fun[$(this).attr('bhv-gen')], $(this));
                         });
                 });
 
-                for (id in r_behaviours) {
-                        var b = r_behaviours[id];
+		for (id in r_bhv_fun) {
+			var b = r_bhv_fun[id];
                         for (did in b.depend) {
-                                r_behaviours[did].rdepend[id] = true;
+				r_bhv_fun[did].rdepend[id] = true;
                         }
                 }
 
                 for (i in r_init_html_funs) r_init_html_funs[i]($(document));
-                for (i in r_behaviours) {
-                        var b = r_behaviours[i];
+		for (i in r_bhv_fun) {
+			var b = r_bhv_fun[i];
                         if (b.html) r_invalid_html.push(b);
                 }
                 r_update_html();
 
                 /*
-                for (bhv in r_bhv_func)
+		for (bhv in r_bhv_func)
                         r_bhv_update(bhv);
 
                 for (srv in r_srv_expr) {
@@ -149,8 +149,8 @@ function r_update_html() {
                                 newNode.each(function() { $(this).attr('bhv-id', ''+b.id); });
                                 newNode.find('input:text').each(function() {
                                         var gen = $(this).attr('bhv-gen');
-                                        if (gen && r_behaviours[gen].value)
-						$(this).val(r_behaviours[gen].value.get());
+					if (gen && r_bhv_fun[gen].value)
+						$(this).val(r_bhv_fun[gen].value.get());
                                 });
 
                                 for (i in r_init_html_funs) r_init_html_funs[i](newNode);

@@ -31,12 +31,12 @@ function r_prim_bhv_to_html_inner(out) {
 
                         b.gen = gen;
                         b.depend[gen] = true;
-                        r_behaviours[gen].rdepend[b.id] = true;
+			r_bhv_fun[gen].rdepend[b.id] = true;
                         // TODO: clear old dependency
                 });
                 if (!b.gen) return cthunk( { Nothing: null, NotYet: null } );
-                return r_behaviours[b.gen].compute(x, env).get();
-        }); }
+		return r_bhv_fun[b.gen].compute(x, env).get();
+	}); }
 }
 
 function r_prim_bjoin(out) {
@@ -61,8 +61,8 @@ function r_prim_const(value) {
         this.compute = function(x, env) {
                 return new Thunk(function() {
                         var vg = value.get();
-                        if (vg.constructor.name == 'Behaviour') {
-                                bhv = new Behaviour();
+			if (vg.constructor.name == 'BhvFun') {
+				bhv = new BhvFun();
                                 bhv.compute = function(x) {
                                         return vg.compute(x, env);
                                 };

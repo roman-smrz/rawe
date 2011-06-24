@@ -115,12 +115,15 @@ escapeStringHtml = (>>=helper)
               helper c = [c]
 
 
-data BehaviourFun a b = forall f. (BehaviourPrim f a b) => Prim f
+data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
                       | Assigned Int
                       | (a ~ b) => BhvID
 
+type Bhv a = BehaviourFun () a
 
-type Behaviour a = BehaviourFun () a
+type BehaviourFun = BhvFun
+type Behaviour a = Bhv a
+
 
 
 
@@ -161,7 +164,7 @@ instance PreCartesian BehaviourFun (,) where
 
 
 
-class BehaviourPrim f a b | f -> a b where
+class BhvPrim f a b | f -> a b where
         bhvPrim :: f -> HtmlM (String, [RawJS])
 
 
@@ -169,7 +172,7 @@ class BehaviourPrim f a b | f -> a b where
 
 
 data BhvServer a b = BhvServer String JSString
-instance BehaviourPrim (BhvServer a b) a b where
+instance BhvPrim (BhvServer a b) a b where
         bhvPrim (BhvServer func name) = do
                 jname <- bhvValue name
                 return (func, [jname])
@@ -226,7 +229,7 @@ addBehaviour b = do
 
 instance BhvValue (BehaviourFun a b) where
         bhvValue f = do jid <- return.show =<< addBehaviour f
-                        return $ RawJS $ "cthunk(r_behaviours["++jid++"])"
+                        return $ RawJS $ "cthunk(r_bhv_fun["++jid++"])"
 
 
 data HtmlState = HtmlState
@@ -291,7 +294,7 @@ addAttr _ t@(Text _) = t
 -- addAttr a (Placeholder p as) = Placeholder p (a:as)
 
 data AddAttr = AddAttr Attribute
-instance BehaviourPrim AddAttr Html Html where
+instance BhvPrim AddAttr Html Html where
         bhvPrim (AddAttr (AttrVal name val)) = do
                 jname <- bhvValue name; jval <- bhvValue val
                 return ("add_attr", [jname, jval])
@@ -312,14 +315,14 @@ initReactive = do
         script ! type_ "text/javascript" $ do
                 str $ "$(document).ready(function() {\n"
                 forM_ bs $ \(id, func, params) ->
-                        str $ "r_behaviours["++show id++"] = new Behaviour("++show id++");\n"
+                        str $ "r_bhv_fun["++show id++"] = new BhvFun("++show id++");\n"
                 forM_ hbs $ \id ->
-                        str $ "r_behaviours["++show id++"].html = true;\n"
+                        str $ "r_bhv_fun["++show id++"].html = true;\n"
                 forM_ bs $ \(id, func, params) -> do
                         let jid = show id
                             jfunc = "r_prim_"++func
                             jparams = concatMap ((',':).unRawJS) params
-                        str $ jfunc++".call(r_behaviours["++jid++"]"++jparams++");\n"
+                        str $ jfunc++".call(r_bhv_fun["++jid++"]"++jparams++");\n"
                 str $ "r_init();\n"
                 str $ "});\n";
 
@@ -392,7 +395,7 @@ instance ToHtmlBehaviour a => ToHtmlBehaviour (Maybe a) where
 
 
 data BhvHtmlB a = BhvHtmlB (Behaviour Html) (Behaviour a)
-instance BehaviourPrim (BhvHtmlB a) () (HtmlM (Behaviour a)) where
+instance BhvPrim (BhvHtmlB a) () (HtmlM (Behaviour a)) where
         bhvPrim (BhvHtmlB html b) = do
                 bid <- addBehaviour b
                 htmlv <- bhvValue $ html ! AttrVal "bhv-gen" (show bid)
@@ -403,7 +406,7 @@ toHtmlB v x = Prim $ BhvHtmlB (toHtml x) v
 
 
 data HaskToBhv a b = HaskToBhv (Behaviour a -> Behaviour b)
-instance BehaviourPrim (HaskToBhv a b) a b where
+instance BhvPrim (HaskToBhv a b) a b where
         bhvPrim (HaskToBhv f) = do iid <- htmlUniq; ji <- bhvValue $ Assigned iid
                                    addBehaviour' iid "hask_to_bhv_inner" []
                                    jf <- bhvValue (f $ Assigned iid)
@@ -680,28 +683,28 @@ b_typeof = b_fromJSString . b_typeof'
 
 
 data BhvEnumFromTo = BhvEnumFromTo
-instance BehaviourPrim BhvEnumFromTo (Int,Int) [Int] where
+instance BhvPrim BhvEnumFromTo (Int,Int) [Int] where
         bhvPrim BhvEnumFromTo = return ("enum_from_to", [])
 benumFromTo :: BehaviourFun (Int,Int) [Int]
 benumFromTo = Prim BhvEnumFromTo
 
 data BhvConst a b = (BhvValue b) => BhvConst b
-instance BehaviourPrim (BhvConst a b) a b where
+instance BhvPrim (BhvConst a b) a b where
         bhvPrim (BhvConst x) = do jx <- bhvValue x
                                   return ("const", [jx])
 
 
 data BhvPrimFunc a b = BhvPrimFunc String
-instance BehaviourPrim (BhvPrimFunc a b) a b where
+instance BhvPrim (BhvPrimFunc a b) a b where
         bhvPrim (BhvPrimFunc name) = return (name, [])
 
 data BhvModifier a b c d = BhvModifier String (BehaviourFun a b)
-instance BehaviourPrim (BhvModifier a b c d) c d where
+instance BhvPrim (BhvModifier a b c d) c d where
         bhvPrim (BhvModifier name x) = do jx <- bhvValue x
                                           return (name, [jx])
 
 data BhvModifier2 a b c d e f = BhvModifier2 String (BehaviourFun a b) (BehaviourFun c d)
-instance BehaviourPrim (BhvModifier2 a b c d e f) e f where
+instance BhvPrim (BhvModifier2 a b c d e f) e f where
         bhvPrim (BhvModifier2 name x y) = do jx <- bhvValue x; jy <- bhvValue y
                                              return (name, [jx, jy])
 
