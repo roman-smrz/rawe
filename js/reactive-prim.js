@@ -206,7 +206,7 @@ function r_prim_spost(name) {
                 if (typeof x.get().Timed == 'undefined')
                         return { Nothing: null };
 
-                var time = x.get().Timed[0];
+                var time = x.get().Timed[0].get();
                 if (typeof results[time] != 'undefined')
                         return results[time]
                 results[time] = { Nothing: null };
@@ -415,11 +415,13 @@ function r_prim_maybe() {
 /* Timed constructors and destructor */
 
 function r_prim_not_yet() {
-        this.compute = function() { return cthunk({ NotYet: null }); };
+	this.compute = function() { return cthunk({ NotYet: [] }); };
 }
 
 function r_prim_on_time() {
-        this.compute = function(x) { return cthunk( { Timed: [ ++r_current_time, x ] } ); };
+	this.compute = function(x) { return new Thunk(function() {
+		return { Timed: x.get() }
+	}); };
 }
 
 function r_prim_timed() {
@@ -430,7 +432,7 @@ function r_prim_timed() {
 
                 if (typeof value.get().Timed == 'undefined')
 			return not_yet;
-		return on_time.get().compute(value.get().Timed[1], env);
+		return on_time.get().compute(cthunk( value.get().Timed ), env);
 	};
 }
 
@@ -443,6 +445,30 @@ function r_prim_timed_map() {
                         return { Timed: [ x.get().Timed[0], f.get().compute(x.get().Timed[1], env) ] };
                 return x.get();
         }); };
+}
+
+function r_prim_timed_fold(step, def, ev) {
+	var value = def.get().compute(cthunk([]), {});
+	var b = this;
+	var last_recomp = 0;
+
+	step = step.get();
+	ev = ev.get();
+	this.depend[ev.id] = true;
+
+	this.compute = function(_, env) { return new Thunk(function() {
+		if (!b.valid) {
+			var timed = ev.compute(cthunk([]), env).get();
+
+			if (timed.Timed && timed.Timed[0].get() > last_recomp) {
+				value = step.compute(cthunk( [ timed.Timed[0], cthunk( [ value, timed.Timed[1] ] ) ] ), env);
+				last_recomp = timed.Timed[0].get();
+			}
+
+			b.valid = true;
+		}
+		return value.get();
+	}); };
 }
 
 

@@ -178,7 +178,9 @@ instance BhvPrim (BhvServer a b) a b where
                 return (func, [jname])
 
 
-data Timed a -- = NotYet | Timed Int a
+data Time
+
+data Timed a = NotYet | Timed Time a
 
 {-
 instance JSON a => JSON (Timed a) where
@@ -619,15 +621,26 @@ b_fromJust = b_maybe (b_error "fromJust: Nothing") id
 b_notYet :: Behaviour (Timed a)
 b_notYet = primFunc "not_yet"
 
-{-
-b_onTime :: Behaviour a -> Behaviour (Timed a)
-b_onTime = unOp "on_time"
--}
+b_onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
+b_onTime = binOp "on_time"
 
-b_timed :: Behaviour b -> (Behaviour a -> Behaviour b) -> Behaviour (Timed a) -> Behaviour b
-b_timed def f = terOp "timed" def (cb $ haskToBhv f)
+b_timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
+b_timed def f = terOp "timed" def (cb $ haskToBhv $ b_uncurry f)
 
-b_unsafeMapTimed f = binOp "timed_map" (cb $ haskToBhv f)
+data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
+instance BhvPrim (TimedFold a b) () a where
+    bhvPrim (TimedFold step def ev) = do
+        jstep <- bhvValue $ haskToBhv $ b_uncurryAll step
+        jdef <- bhvValue def
+        jev <- bhvValue ev
+        return ("timed_fold", [jstep, jdef, jev])
+
+b_timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
+b_timedFold f x = Prim . TimedFold f x
+
+
+instance BFunctor Timed where
+    b_fmap f = b_timed b_notYet (\t x -> b_onTime t (f x))
 
 
 {- Result constructors and destructor -}
@@ -799,7 +812,7 @@ post' name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" $ toJSString na
 
 post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Behaviour (Maybe a))
 post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
-        post' name . b_unsafeMapTimed (b_toJSObject . b_fmap (b_fmap b_toJSString))
+    post' name . b_fmap (b_toJSObject . b_fmap (b_fmap b_toJSString))
 
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
@@ -830,7 +843,7 @@ b_error = b_error' . b_toJSString
 b_undefined = b_error "undefined"
 
 b_guardTimed :: (Behaviour a -> Behaviour Bool) -> Behaviour (Timed a) -> Behaviour (Timed a)
-b_guardTimed f tx = b_ite (b_timed b_false f tx) tx b_notYet
+b_guardTimed f tx = b_ite (b_timed b_false (const f) tx) tx b_notYet
 
 
 form' :: HtmlM a -> HtmlM (Behaviour (Timed (JSObject JSString)))
@@ -841,10 +854,10 @@ form' (HtmlM f) = do
                        in (Assigned bid, ([Tag "form" [AttrVal "bhv-gen" (show bid)] content], s'))
 
 form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
-form = fmap (b_unsafeMapTimed (b_fromJSObject . b_fmap b_fromJSString)) . form'
+form = fmap (b_fmap (b_fromJSObject . b_fmap b_fromJSString)) . form'
 
 t2m :: Behaviour (Timed a) -> Behaviour (Maybe a)
-t2m = b_timed b_nothing b_just
+t2m = b_timed b_nothing (const b_just)
 
 textfield' :: String -> HtmlM (Behaviour JSString)
 textfield' n = input ! type_ "text" ! name n

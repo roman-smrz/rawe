@@ -176,7 +176,7 @@ function r_init_gen(b, elem) {
 			elem.find('input, select, textarea').each(function() {
 				result[$(this).attr('name')] = cthunk( $(this).val() );
 			});
-			b.change(cthunk({ Timed: [++r_current_time, cthunk(result)] }));
+			b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(result)] }));
                 });
         }
 
