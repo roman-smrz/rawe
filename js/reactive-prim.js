@@ -240,6 +240,12 @@ function r_prim_to_html_jsstring() {
 	};
 }
 
+function r_prim_append_html() {
+	this.compute_ = function(params) {
+		return params[0].get().clone().append(params[1].get().clone());
+	};
+}
+
 function r_prim_typeof() {
 	this.compute_ = function(x) { return typeof x; }
 }

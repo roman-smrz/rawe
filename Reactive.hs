@@ -303,6 +303,10 @@ instance BhvPrim AddAttr Html Html where
                 return ("add_attr", [jname, jval])
 
 
+b_appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
+b_appendHtml = binOp "append_html"
+
+
 
 jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
 reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
@@ -389,6 +393,9 @@ instance ToHtmlBehaviour String where
 instance ToHtmlBehaviour JSString where
         toHtml = unOp "to_html_jsstring"
 
+
+instance ToHtmlBehaviour [Html] where
+        toHtml = b_foldl b_appendHtml (cb $ div $ return ())
 
 instance ToHtmlBehaviour a => ToHtmlBehaviour (Maybe a) where
         toHtml = b_maybe (cb $ div $ return ()) toHtml
