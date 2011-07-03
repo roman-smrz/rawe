@@ -7,7 +7,9 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Reactive where
+
+module FRP.Rawe where
+
 
 import Prelude hiding (head,div,(.),id,fst,snd,span)
 
