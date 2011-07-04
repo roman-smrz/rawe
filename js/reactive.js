@@ -37,8 +37,8 @@ function cthunk(x) {
 
 function BhvFun(id) {
         this.id = id;
-        this.depend = {};
-        this.rdepend = {};
+	this.depend = [];
+	this.rdepend = [];
         this.valid = true;
         this.last_change = 0;
 
@@ -78,7 +78,7 @@ function BhvFun(id) {
                 }
 
                 for (i in this.rdepend)
-			r_bhv_fun[i].invalidate();
+			this.rdepend[i].invalidate();
         }
 
         /*
@@ -107,9 +107,8 @@ function r_init() {
 
 		for (id in r_bhv_fun) {
 			var b = r_bhv_fun[id];
-                        for (did in b.depend) {
-				r_bhv_fun[did].rdepend[id] = true;
-                        }
+			for (i in b.depend)
+				b.depend[i].rdepend.push(b);
                 }
 
                 for (i in r_init_html_funs) r_init_html_funs[i]($(document));

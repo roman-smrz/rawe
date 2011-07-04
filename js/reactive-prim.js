@@ -21,7 +21,7 @@ function r_prim_add_attr() {
 
 function r_prim_bhv_to_html_inner(out) {
         var b = this;
-        this.depend[out.get().id] = true;
+	this.depend.push(out.get());
 
         this.compute = function(x, env) { return new Thunk(function() {
                 $('*[bhv-id='+out.get().id+']').each(function() {
@@ -30,8 +30,8 @@ function r_prim_bhv_to_html_inner(out) {
                         if (!gen) return;
 
                         b.gen = gen;
-                        b.depend[gen] = true;
-			r_bhv_fun[gen].rdepend[b.id] = true;
+			b.depend.push(r_bhv_fun[gen]);
+			r_bhv_fun[gen].rdepend.push(b);
                         // TODO: clear old dependency
                 });
                 if (!b.gen) return cthunk( { Nothing: null, NotYet: null } );
@@ -47,8 +47,8 @@ function r_prim_bjoin(out) {
 
 // BehaviourFun a b -> BehaviourFun b c -> BehaviourFun a c
 function r_prim_compose(f, g) {
-        this.depend[f.get().id] = true;
-        this.depend[g.get().id] = true;
+	this.depend.push(f.get());
+	this.depend.push(g.get());
 
 	this.compute = function(x, env) {
 		var y = f.get().compute(x, env);
@@ -121,7 +121,7 @@ function r_prim_gen() {
 }
 
 function r_prim_hask_to_bhv(inner, func) {
-        this.depend[func.get().id] = true;
+	this.depend.push(func.get());
         this.compute = function(x, env) {
                 var h2b = env.h2b || {};
                 var nh2b = {};
@@ -169,8 +169,8 @@ function r_prim_snd() {
 }
 
 function r_prim_product(f, g) {
-        this.depend[f.get().id] = true;
-        this.depend[g.get().id] = true;
+	this.depend.push(f.get());
+	this.depend.push(g.get());
         this.compute = function(x, env) { return new Thunk(function() {
                 return [f.get().compute(x, env), g.get().compute(x, env)];
         }); };
@@ -454,7 +454,7 @@ function r_prim_timed_fold(step, def, ev) {
 
 	step = step.get();
 	ev = ev.get();
-	this.depend[ev.id] = true;
+	this.depend.push(ev);
 
 	this.compute = function(_, env) { return new Thunk(function() {
 		if (!b.valid) {
