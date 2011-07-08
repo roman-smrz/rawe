@@ -3,6 +3,29 @@ function r_prim_id() {
 	this.compute = function(x) { return x; }
 }
 
+function r_prim_apply() {
+	this.compute = function(params) { return new Thunk(function() {
+		var func = params.get()[0].get();
+		var value = params.get()[1];
+		var res = func(value);
+		return res.get();
+	}); };
+}
+
+function r_prim_curry(f) {
+	this.add_depend(f.get());
+	this.compute = function(x) { return new Thunk(function() {
+		return function(y) { return f.get().compute(cthunk([x,y])); }
+	}); };
+}
+
+function r_prim_uncurry(f) {
+	this.add_depend(f.get());
+	this.compute = function(xy) { return new Thunk(function() {
+		return f.get().compute(xy.get()[0]).get()(xy.get()[1]).get();
+	}); };
+}
+
 function r_prim_add_attr() {
         this.compute_ = function(params) {
                 var name, value;

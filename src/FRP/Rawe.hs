@@ -15,12 +15,14 @@ import Prelude hiding (head,div,(.),id,fst,snd,span)
 
 import Control.Category
 import Control.Category.Cartesian
+import Control.Category.Cartesian.Closed
 import Control.Functor
 
 import Control.Monad.State
 import Control.Monad.Writer
 
 import Data.String
+import Data.Void
 
 import Text.JSON
 
@@ -141,27 +143,38 @@ instance Category BehaviourFun where
 
 
 instance PFunctor (,) BehaviourFun BehaviourFun where
-        first = Prim . BhvModifier "first"
+    first = first'
 
 instance QFunctor (,) BehaviourFun BehaviourFun where
-        second = Prim . BhvModifier "second"
+    second = second'
 
 instance Bifunctor (,) BehaviourFun BehaviourFun BehaviourFun where
-        bimap x y = Prim $ BhvModifier2 "bimap" x y
+    bimap = bimapPreCartesian
 
 instance Braided BehaviourFun (,) where
-        braid = primFunc "braid"
+    braid = braidPreCartesian
 
 instance Associative BehaviourFun (,) where
-        associate = primFunc "associate"
+    associate = associatePreCartesian
 
 instance Coassociative BehaviourFun (,) where
-        coassociate = primFunc "coassociate"
+    coassociate = coassociatePreCartesian
 
 instance PreCartesian BehaviourFun (,) where
         x &&& y = Prim $ BhvModifier2 "product" x y
         fst = primFunc "fst"
         snd = primFunc "snd"
+
+instance HasIdentity BhvFun (,) Void
+
+instance Monoidal BhvFun (,) Void where
+    idl = snd
+    idr = fst
+
+instance CCC BehaviourFun (,) (->) Void where
+    apply = primFunc "apply"
+    curry = Prim . BhvModifier "curry"
+    uncurry = Prim . BhvModifier "uncurry"
 
 
 
