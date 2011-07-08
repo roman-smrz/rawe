@@ -58,6 +58,9 @@ function r_prim_compose(f, g) {
 // a -> BehaviourFun b a
 function r_prim_const(value) {
         this.compute = function(x, env) {
+		if (value.get().constructor.name == 'BhvFun')
+			this.add_depend(value.get());
+
                 return new Thunk(function() {
                         var vg = value.get();
 			if (vg.constructor.name == 'BhvFun') {
