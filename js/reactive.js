@@ -81,6 +81,14 @@ function BhvFun(id) {
 			this.rdepend[i].invalidate();
         }
 
+	this.add_depend = function(bhv) {
+		for (var i in this.depend)
+			if (this.depend[i] == bhv)
+				return;
+		this.depend.push(bhv);
+		bhv.rdepend.push(this);
+	}
+
         /*
         this.recompute = function() {
                 if (this.valid) return;
@@ -104,12 +112,6 @@ function r_init() {
 				r_init_gen(r_bhv_fun[$(this).attr('bhv-gen')], $(this));
                         });
                 });
-
-		for (id in r_bhv_fun) {
-			var b = r_bhv_fun[id];
-			for (i in b.depend)
-				b.depend[i].rdepend.push(b);
-                }
 
                 for (i in r_init_html_funs) r_init_html_funs[i]($(document));
 		for (i in r_bhv_fun) {
