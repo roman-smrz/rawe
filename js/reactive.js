@@ -7,9 +7,7 @@ var r_cur_bhv = null;
 
 
 var r_bhv_fun = {};
-var r_invalid_html = [];
 var r_current_time = 0;
-var r_init_html_funs = [];
 
 
 
@@ -39,7 +37,7 @@ function BhvFun(id) {
         this.id = id;
 	this.depend = [];
 	this.rdepend = [];
-        this.valid = true;
+        this.valid = false;
         this.last_change = 0;
 
         /*
@@ -74,12 +72,29 @@ function BhvFun(id) {
                 this.last_change = r_current_time;
 
                 if (this.html) {
-                        r_invalid_html.push(this);
+			var n = this.compute(cthunk(null)).get();
+			this.html.replaceWith(n);
+			this.html = n;
                 }
 
                 for (i in this.rdepend)
 			this.rdepend[i].invalidate();
         }
+
+	this.init = function() {
+                if (this.valid) return;
+		this.valid = true;
+
+		for (i in this.depend)
+			this.depend[i].init();
+
+                if (this.html) {
+			var n = this.compute(cthunk(null)).get();
+			this.html.replaceWith(n);
+			this.html = n;
+                }
+	}
+
 
 	this.add_depend = function(bhv) {
 		for (var i in this.depend)
@@ -103,94 +118,10 @@ function BhvFun(id) {
 
 
 function r_init() {
-        $(document).ready(function() {
-                r_init_html_funs.push(function(elems) {
-                        elems.find('*[bhv-id]').each(function() {
-				r_invalid_html.push(r_bhv_fun[$(this).attr('bhv-id')]);
-                        });
-                        elems.add(elems.find('*[bhv-gen]')).filter('*[bhv-gen]').each(function() {
-				r_init_gen(r_bhv_fun[$(this).attr('bhv-gen')], $(this));
-                        });
-                });
-
-                for (i in r_init_html_funs) r_init_html_funs[i]($(document));
-		for (i in r_bhv_fun) {
-			var b = r_bhv_fun[i];
-                        if (b.html) r_invalid_html.push(b);
-                }
-                r_update_html();
-
-                /*
-		for (bhv in r_bhv_func)
-                        r_bhv_update(bhv);
-
-                for (srv in r_srv_expr) {
-                        (function(srv, ids) {
-                                $.get(document.location.href, { q: srv },
-                                        function(json) {
-                                                r_srv_val[srv] = jQuery.parseJSON(json)
-                                                for (bhv in ids) r_bhv_update(bhv);
-                                        });
-                        })(srv, r_srv_deps[srv]);
-                }
-                */
-        });
+	for (i in r_bhv_fun)
+		r_bhv_fun[i].init();
 }
 
-function r_update_html() {
-        while (b = r_invalid_html.shift()) {
-		var value = b.compute(cthunk(null), {}).get();
-                if (typeof value == 'undefined')
-                        value = $('<div></div>');
-
-                var first = true;
-                $('*[bhv-id="'+b.id+'"]').each(function() {
-                        if (first) {
-                                var newNode = value.clone();
-                                newNode.each(function() { $(this).attr('bhv-id', ''+b.id); });
-                                newNode.find('input:text').each(function() {
-                                        var gen = $(this).attr('bhv-gen');
-					if (gen && r_bhv_fun[gen].value)
-						$(this).val(r_bhv_fun[gen].value.get());
-                                });
-
-                                for (i in r_init_html_funs) r_init_html_funs[i](newNode);
-                                $(this).replaceWith(newNode);
-                                first = false;
-                        } else {
-                                $(this).remove();
-                        }
-                });
-        }
-}
-
-
-
-
-function r_init_gen(b, elem) {
-        if (elem.is('form')) {
-                if (typeof b.value == 'undefined')
-                        b.value = cthunk({ NotYet: null });
-                elem.submit(function(e) {
-                        e.preventDefault();
-			var result = {};
-			elem.find('input, select, textarea').each(function() {
-				result[$(this).attr('name')] = cthunk( $(this).val() );
-			});
-			b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(result)] }));
-                });
-        }
-
-        if (elem.is('input:text')) {
-		b.value = cthunk(elem.val());
-                elem.change(function(e) {
-			b.change(cthunk(elem.val()));
-                });
-                elem.keyup(function(e) {
-			b.change(cthunk(elem.val()));
-                });
-        }
-}
 
 
 /*
@@ -278,3 +209,8 @@ function r_prim_enumFromTo(param) {
         return result;
 }
 */
+
+
+$.fn.find2 = function(selector) {
+    return this.filter(selector).add(this.find(selector));
+};

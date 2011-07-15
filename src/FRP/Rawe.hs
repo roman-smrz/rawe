@@ -59,15 +59,28 @@ instance BhvValue Attribute where
 
 
 instance BhvValue Html where
-        bhvValue html = do
-                (raw, ()) <- renderH html
-                return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
+    bhvValue html = do
+        (i, (raw, ())) <- withHtmlCurrent $ renderH html
+        modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
+        return.RawJS $ "cthunk(r_html_"++show i++")"
 
 instance BhvValue (HtmlM (Behaviour a)) where
-        bhvValue html = do
-                rec (raw, b) <- renderH (html ! AttrVal "bhv-inner" (show bid))
-                    bid <- addBehaviour b
-                return.RawJS $ "cthunk( $('"++escapeStringJS raw++"') )"
+    bhvValue html = do
+        (i, (raw, b)) <- withHtmlCurrent $ renderH html
+        (RawJS inner) <- bhvValue b
+        modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
+        return.RawJS $ "cthunk(r_html_"++show i++")"
+
+
+withHtmlCurrent :: HtmlM a -> HtmlM (Int, a)
+withHtmlCurrent act = do
+    i <- htmlUniq
+    orig <- get
+    put $ orig { hsHtmlCurrent = Just i }
+    res <- act
+    modify $ \s -> s { hsHtmlCurrent = hsHtmlCurrent orig }
+    return (i, res)
+
 
 jsHtml :: HtmlM a -> HtmlM (RawJS, a)
 jsHtml html = do
@@ -228,6 +241,13 @@ addBehaviour' id name params =
         modify $ \s -> s { hsBehaviours = (id, name, params) : hsBehaviours s }
 
 
+addBehaviourName :: String -> [RawJS] -> HtmlM Int
+addBehaviourName name params = do
+    bid <- htmlUniq
+    addBehaviour' bid name params
+    return bid
+
+
 addBehaviour :: BehaviourFun a b -> HtmlM Int
 addBehaviour b = do
         -- We need to do this so b does not need to be evaluated for internal
@@ -252,8 +272,13 @@ instance BhvValue (BehaviourFun a b) where
 data HtmlState = HtmlState
         { hsUniq :: Int
         , hsBehaviours :: [(Int, String, [RawJS])]
-        , hsHtmlBehaviours :: [Int]
+        , hsHtmlValues :: [(Int, String, Maybe String)]
+        , hsHtmlCurrent :: Maybe Int
+        , hsHtmlBehaviours :: [(Int, Maybe Int)]
+        , hsHtmlGens :: [(Int, Maybe Int)]
         }
+
+emptyHtmlState = HtmlState 0 [] [] Nothing [] []
 
 data HtmlStructure = Tag String [Attribute] [HtmlStructure]
                    | Text String
@@ -332,18 +357,36 @@ reactive_prim = script ! type_ "text/javascript" ! src "js/reactive-prim.js" $ "
 initReactive :: Html
 initReactive = do
         bs <- gets $ reverse . hsBehaviours
+        hs <- gets $ reverse . hsHtmlValues
         hbs <- gets $ reverse . hsHtmlBehaviours
+        hgs <- gets $ reverse . hsHtmlGens
         script ! type_ "text/javascript" $ do
                 str $ "$(document).ready(function() {\n"
-                forM_ bs $ \(id, func, params) ->
-                        str $ "r_bhv_fun["++show id++"] = new BhvFun("++show id++");\n"
-                forM_ hbs $ \id ->
-                        str $ "r_bhv_fun["++show id++"].html = true;\n"
-                forM_ bs $ \(id, func, params) -> do
-                        let jid = show id
+
+                forM_ bs $ \(i, func, params) ->
+                        str $ "r_bhv_fun["++show i++"] = new BhvFun("++show i++");\n"
+
+                forM_ hs $ \(i, h, mi) ->
+                    str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
+                    case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
+                    ++ ";\n"
+
+                forM_ hbs $ \(i, mv) ->
+                    let var = case mv of Nothing -> "$('body')"
+                                         Just v  -> "r_html_"++show v
+                     in str $ "r_bhv_fun["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
+
+                forM_ hgs $ \(i, mv) ->
+                    let var = case mv of Nothing -> "$('body')"
+                                         Just v  -> "r_html_"++show v
+                     in str $ "r_bhv_fun["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
+
+                forM_ bs $ \(i, func, params) -> do
+                        let jid = show i
                             jfunc = "r_prim_"++func
                             jparams = concatMap ((',':).unRawJS) params
                         str $ jfunc++".call(r_bhv_fun["++jid++"]"++jparams++");\n"
+
                 str $ "r_init();\n"
                 str $ "});\n";
 
@@ -384,12 +427,16 @@ type_ = AttrVal "type"
 src = AttrVal "src"
 style = AttrVal "style"
 
+htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Behaviour a)
+htmlGen name tag (HtmlM f) = do
+    bid <- addBehaviourName ("gen_"++name) []
+    cur <- gets hsHtmlCurrent
+    HtmlM $ \s -> let (_, (content, s')) = f s
+                   in (Assigned bid, ([addAttr (AttrVal "bhv-gen" (show bid)) (tag content)],
+                       s' { hsHtmlGens = (bid, cur) : hsHtmlGens s' } ))
 
-input :: HtmlM (Behaviour a)
-input = do
-        bid <- htmlUniq
-        addBehaviour' bid "gen" []
-        HtmlM $ \s -> (Assigned bid, ([Tag "input" [AttrVal "bhv-gen" (show bid)] []], s))
+input :: String -> HtmlM (Behaviour a)
+input t = htmlGen ("input_"++t) (Tag "input" [AttrVal "type" t]) (return ())
 
 
 
@@ -797,15 +844,16 @@ class BehaviourToHtml a where
         bhv :: Behaviour (HtmlM a) -> HtmlM a
 
 instance BehaviourToHtml () where
-        bhv x = do id <- addBehaviour x
-                   HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
+    bhv x = do id <- addBehaviour x
+               cur <- gets hsHtmlCurrent
+               HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 instance BehaviourToHtml (Behaviour a) where
-        bhv x = do id <- addBehaviour x
-                   jbhv <- bhvValue (Assigned id :: Behaviour (HtmlM (Behaviour a)))
-                   nid <- htmlUniq
-                   addBehaviour' nid "bhv_to_html_inner" [jbhv]
-                   HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
+    bhv x = do id <- addBehaviour x
+               cur <- gets hsHtmlCurrent
+               jbhv <- bhvValue (Assigned id :: Behaviour (HtmlM (Behaviour a)))
+               nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
+               HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 
 
@@ -822,8 +870,7 @@ bhv <-- html = undefined
 
 
 post' :: String -> Behaviour (Timed (JSObject JSString)) -> HtmlM (Behaviour (Maybe JSValue))
-post' name x = do id <- addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
-                  HtmlM $ \s -> (Assigned id, ([], s { hsHtmlBehaviours = id : hsHtmlBehaviours s } ))
+post' name x = fmap Assigned $ addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
 
 post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Behaviour (Maybe a))
 post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
@@ -862,11 +909,7 @@ b_guardTimed f tx = b_ite (b_timed b_false (const f) tx) tx b_notYet
 
 
 form' :: HtmlM a -> HtmlM (Behaviour (Timed (JSObject JSString)))
-form' (HtmlM f) = do
-        bid <- htmlUniq
-        addBehaviour' bid "gen" []
-        HtmlM $ \s -> let (_, (content, s')) = f s
-                       in (Assigned bid, ([Tag "form" [AttrVal "bhv-gen" (show bid)] content], s'))
+form' = htmlGen "form" (Tag "form" [])
 
 form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
 form = fmap (b_fmap (b_fromJSObject . b_fmap b_fromJSString)) . form'
@@ -875,13 +918,19 @@ t2m :: Behaviour (Timed a) -> Behaviour (Maybe a)
 t2m = b_timed b_nothing (const b_just)
 
 textfield' :: String -> HtmlM (Behaviour JSString)
-textfield' n = input ! type_ "text" ! name n
+textfield' n = input "text" ! name n
 
 textfield :: String -> HtmlM (Behaviour String)
 textfield = fmap b_fromJSString . textfield'
 
+submit' :: HtmlM (Behaviour (Timed JSString))
+submit' = input "submit"
+
 submit :: HtmlM (Behaviour (Timed String))
-submit = input ! type_ "submit"
+submit = fmap (b_fmap b_fromJSString) $ submit'
+
+button :: HtmlM (Bhv (Timed ()))
+button = input "button"
 
 (~<) :: BehaviourFun a Int -> BehaviourFun a Int -> BehaviourFun a Bool
 (~<) = binOp "lt_int"
@@ -896,7 +945,7 @@ type RenderMonad a = Writer String a
 
 render :: Html -> String
 render html = let (HtmlM f) = renderH html
-                  ((result, ()), _) = f (HtmlState 1 [(0, "id", [])] [])
+                  ((result, ()), _) = f (emptyHtmlState { hsUniq = 1, hsBehaviours = [(0, "id", [])] } )
                in result
 --render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "")
 

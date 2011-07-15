@@ -38,27 +38,20 @@ function r_prim_add_attr() {
                         name = attr.AttrBool[0];
                         value = true;
                 }
-                return params[0].get().clone().attr(name, value);
+                return params[0].get().attr(name, value);
         }
 }
 
 function r_prim_bhv_to_html_inner(out) {
-        var b = this;
+	var b = this;
 	this.add_depend(out.get());
 
-        this.compute = function(x, env) { return new Thunk(function() {
-                $('*[bhv-id='+out.get().id+']').each(function() {
-			var gen = $(this).attr('bhv-inner');
-                        // TODO: some error message
-                        if (!gen) return;
-
-                        b.gen = gen;
-			b.add_depend(r_bhv_fun[gen]);
-                        // TODO: clear old dependency
-                });
-                if (!b.gen) return cthunk( { Nothing: null, NotYet: null } );
-		return r_bhv_fun[b.gen].compute(x, env).get();
-	}); }
+	this.compute = function(x) { return new Thunk(function() {
+		var inner = out.get().html.prop('rawe_html_inner').get();
+		// TODO: clear old dependency
+		b.add_depend(inner);
+		return inner.compute(x).get();
+	}); };
 }
 
 function r_prim_bjoin(out) {
@@ -140,10 +133,72 @@ function r_prim_gen() {
 		this.value = value;
                 r_current_time++;
                 this.invalidate();
-                r_update_html();
         };
 
+	this.gen.prop('rawe_bhv_gen', this);
 }
+
+function r_prim_gen_input_text() {
+	r_prim_gen.call(this);
+
+	var elem = this.gen;
+	var b = this;
+
+	this.value = cthunk(elem.val());
+
+	elem.change(function(e) {
+		b.change(cthunk(elem.val()));
+	});
+	elem.keyup(function(e) {
+		b.change(cthunk(elem.val()));
+	});
+
+	elem.removeAttr('bhv-gen');
+}
+
+function r_prim_gen_input_button() {
+	r_prim_gen.call(this);
+
+	var b = this;
+	var elem = this.gen;
+
+	b.value = cthunk({ NotYet: [] });
+	elem.click(function(e) {
+		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk([])] }));
+	});
+}
+
+function r_prim_gen_input_submit() {
+	r_prim_gen.call(this);
+
+	var b = this;
+	var elem = this.gen;
+
+	b.value = cthunk({ NotYet: [] });
+	elem.click(function(e) {
+		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(elem.val())] }));
+	});
+}
+
+function r_prim_gen_form() {
+	r_prim_gen.call(this);
+	var b = this;
+	var elem = this.gen;
+
+	if (typeof b.value == 'undefined')
+		b.value = cthunk({ NotYet: null });
+
+	elem.submit(function(e) {
+		e.preventDefault();
+		var result = {};
+		elem.find('input, select, textarea').each(function() {
+			result[$(this).attr('name')] = cthunk( $(this).val() );
+		});
+		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(result)] }));
+	});
+}
+
+
 
 function r_prim_hask_to_bhv(inner, func) {
 	this.add_depend(func.get());
@@ -216,7 +271,6 @@ function r_prim_sget(name) {
                         b.values.push([x, jQuery.parseJSON(json)]);
                         r_current_time++;
                         b.invalidate();
-                        r_update_html();
                 });
 
                 return { Nothing: null };
@@ -245,7 +299,6 @@ function r_prim_spost(name) {
 			results[time] = { Just: cthunk(x) };
                         r_current_time++;
                         b.invalidate();
-                        r_update_html();
                 });
 
                 return { Nothing: null };
@@ -267,7 +320,7 @@ function r_prim_to_html_jsstring() {
 
 function r_prim_append_html() {
 	this.compute_ = function(params) {
-		return params[0].get().clone().append(params[1].get().clone());
+		return params[0].get().add(params[1].get());
 	};
 }
 
