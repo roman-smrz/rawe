@@ -133,8 +133,8 @@ escapeStringHtml = (>>=helper)
 
 
 data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
-                      | Assigned Int
-                      | (a ~ b) => BhvID
+                | Assigned (Int, Int)
+                | (a ~ b) => BhvID
 
 type Bhv a = BehaviourFun () a
 
@@ -190,6 +190,124 @@ instance CCC BehaviourFun (,) (->) Void where
     uncurry = Prim . BhvModifier "uncurry"
 
 
+bhvPack :: BhvFun a (Bhv a)
+bhvPack = primFunc "bhv_pack"
+
+bhvUnpack :: BhvFun (Bhv a) a
+bhvUnpack = primFunc "bhv_unpack"
+
+
+instance (BhvValue b) => BhvValue (Bhv a -> b) where
+    bhvValue = bhvValueCommon bhvValue $ \r iid ->
+        [ "var r_bhv_fun_"++show r++" = {};"
+        , "r_bhv_fun_"++show r++"["++show iid++"] = param.get();"
+        ]
+        {-
+        code <- htmlLocal $ do
+            iid <- htmlUniq
+            r <- gets hsRecursion
+            RawJS result <- bhvValue $ f (Assigned (r,iid))
+
+            bs <- gets $ reverse.hsBehaviours
+            hs <- gets $ reverse.hsHtmlValues
+            hbs <- gets $ reverse.hsHtmlBehaviours
+            return $
+                "\tvar r_bhv_fun_"++show r++" = {};\n" ++
+                "\tr_bhv_fun_"++show r++"["++show iid++"] = param.get();\n" ++
+                (concat $ concat $
+                [ flip map bs $ \((r',id'), func, params) ->
+                    "\tr_bhv_fun_"++show r'++"["++show id'++"] = new BhvFun("++show id'++");\n"
+                , flip map hs $ \(i, h) ->
+                    "var r_html_"++show i++" = $('"++escapeStringJS h++"');\n"
+                , flip map hbs $ \(i, mv) ->
+                    let var = case mv of Nothing -> "$('body')"
+                                         Just v  -> "r_html_"++show v
+                     in "r_bhv_fun_"++show r++"["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
+                , flip map bs $ \((r',id'), func, params) ->
+                    let jid = show id'
+                        jfunc = "r_prim_"++func
+                        jparams = concatMap ((',':).unRawJS) params
+                     in "\t"++jfunc++".call(r_bhv_fun_"++show r'++"["++jid++"]"++jparams++");\n"
+                ]) ++ "\treturn "++result++";\n"
+
+        return $ RawJS $ "cthunk(function(param) {\n" ++ code ++ "})"
+        -}
+
+
+class BhvValueFun a b | a -> b where
+    bhvValueFun :: a -> HtmlM RawJS
+    cbf :: a -> Bhv b
+
+instance BhvValueFun (Bhv a) a where
+    bhvValueFun x = do RawJS jx <- bhvValue x
+                       return $ RawJS (jx ++ ".get().compute(cthunk(null))")
+    cbf = id
+
+instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
+    bhvValueFun = bhvValueCommon bhvValueFun $ \r iid ->
+        [ "var r_bhv_fun_"++show r++" = {};"
+        , "r_bhv_fun_"++show r++"["++show iid++"] = new BhvFun();"
+        , "r_prim_const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
+        ]
+    cbf = Prim . BhvConstFun
+
+bhvValueCommon bv begin f = htmlLocal $ do
+    iid <- htmlUniq
+    r <- gets hsRecursion
+    RawJS result <- bv $ f (Assigned (r,iid))
+
+    bs <- gets $ reverse.hsBehaviours
+    hs <- gets $ reverse.hsHtmlValues
+    hbs <- gets $ reverse.hsHtmlBehaviours
+    hgs <- gets $ reverse.hsHtmlGens
+
+    return $ RawJS $ init $ unlines $
+        ("cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
+        map (replicate r '\t' ++) $ (begin r iid ++) $
+        concat
+        [ flip map bs $ \(id, func, params) ->
+            "r_bhv_fun_"++show r++"["++show id++"] = new BhvFun("++show id++");"
+
+        , flip map hs $ \(i, h, mi) ->
+            "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
+            case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
+            ++ ";"
+
+        , flip map hbs $ \(i, mv) ->
+            let var = case mv of Nothing -> "$('body')"
+                                 Just v  -> "r_html_"++show v
+             in "r_bhv_fun_"++show r++"["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');"
+
+        , flip map hgs $ \(i, mv) ->
+            let var = case mv of Nothing -> "$('body')"
+                                 Just v  -> "r_html_"++show v
+             in "r_bhv_fun_"++show r++"["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');"
+
+        , flip map bs $ \(id, func, params) ->
+            let jid = show id
+                jfunc = "r_prim_"++func
+                jparams = concatMap ((',':).unRawJS) params
+             in jfunc++".call(r_bhv_fun_"++show r++"["++jid++"]"++jparams++");"
+
+        , flip map hbs $ \(i, _) ->
+            "r_bhv_fun_"++show r++"["++show i++"].invalidate();"
+        ]
+        ++
+        [ "return "++result++";" ]
+
+
+data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
+instance BhvPrim (BhvConstFun a b b') a b' where
+        bhvPrim (BhvConstFun x) = do jx <- bhvValueFun x
+                                     return ("const", [jx])
+
+--cbf :: (BhvValueFun a a') => a -> BhvFun b a'
+--cbf = Prim . BhvConstFun
+
+
+haskToBhv :: (Bhv a -> Bhv b) -> BhvFun a b
+haskToBhv f = bhvUnpack . apply . (cb f &&& bhvPack)
+
 
 
 class BhvPrim f a b | f -> a b where
@@ -241,32 +359,34 @@ addBehaviour' id name params =
         modify $ \s -> s { hsBehaviours = (id, name, params) : hsBehaviours s }
 
 
-addBehaviourName :: String -> [RawJS] -> HtmlM Int
+addBehaviourName :: String -> [RawJS] -> HtmlM (Int, Int)
 addBehaviourName name params = do
     bid <- htmlUniq
+    r <- gets hsRecursion
     addBehaviour' bid name params
-    return bid
+    return (r,bid)
 
 
-addBehaviour :: BehaviourFun a b -> HtmlM Int
+addBehaviour :: BehaviourFun a b -> HtmlM (Int,Int)
 addBehaviour b = do
         -- We need to do this so b does not need to be evaluated for internal
         -- unique counter and mfix may work for mutually recursive behaviours.
         nid <- htmlUniq
+        r <- gets hsRecursion
 
         case b of
              Prim f -> do
                      (name, params) <- bhvPrim f
                      addBehaviour' nid name params
-                     return nid
+                     return (r,nid)
 
              Assigned id -> return id
-             BhvID -> return 0
+             BhvID -> return (0,0)
 
 
-instance BhvValue (BehaviourFun a b) where
-        bhvValue f = do jid <- return.show =<< addBehaviour f
-                        return $ RawJS $ "cthunk(r_bhv_fun["++jid++"])"
+instance BhvValue (BhvFun a b) where
+    bhvValue f = do (r,i) <- addBehaviour f
+                    return $ RawJS $ "cthunk(r_bhv_fun_"++show r++"["++show i++"])"
 
 
 data HtmlState = HtmlState
@@ -276,9 +396,10 @@ data HtmlState = HtmlState
         , hsHtmlCurrent :: Maybe Int
         , hsHtmlBehaviours :: [(Int, Maybe Int)]
         , hsHtmlGens :: [(Int, Maybe Int)]
+        , hsRecursion :: Int
         }
 
-emptyHtmlState = HtmlState 0 [] [] Nothing [] []
+emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0
 
 data HtmlStructure = Tag String [Attribute] [HtmlStructure]
                    | Text String
@@ -364,7 +485,7 @@ initReactive = do
                 str $ "$(document).ready(function() {\n"
 
                 forM_ bs $ \(i, func, params) ->
-                        str $ "r_bhv_fun["++show i++"] = new BhvFun("++show i++");\n"
+                        str $ "r_bhv_fun_0["++show i++"] = new BhvFun("++show i++");\n"
 
                 forM_ hs $ \(i, h, mi) ->
                     str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
@@ -374,18 +495,18 @@ initReactive = do
                 forM_ hbs $ \(i, mv) ->
                     let var = case mv of Nothing -> "$('body')"
                                          Just v  -> "r_html_"++show v
-                     in str $ "r_bhv_fun["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
+                     in str $ "r_bhv_fun_0["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
 
                 forM_ hgs $ \(i, mv) ->
                     let var = case mv of Nothing -> "$('body')"
                                          Just v  -> "r_html_"++show v
-                     in str $ "r_bhv_fun["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
+                     in str $ "r_bhv_fun_0["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
 
                 forM_ bs $ \(i, func, params) -> do
                         let jid = show i
                             jfunc = "r_prim_"++func
                             jparams = concatMap ((',':).unRawJS) params
-                        str $ jfunc++".call(r_bhv_fun["++jid++"]"++jparams++");\n"
+                        str $ jfunc++".call(r_bhv_fun_0["++jid++"]"++jparams++");\n"
 
                 str $ "r_init();\n"
                 str $ "});\n";
@@ -429,11 +550,11 @@ style = AttrVal "style"
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Behaviour a)
 htmlGen name tag (HtmlM f) = do
-    bid <- addBehaviourName ("gen_"++name) []
+    bid@(~(_,i)) <- addBehaviourName ("gen_"++name) []
     cur <- gets hsHtmlCurrent
     HtmlM $ \s -> let (_, (content, s')) = f s
-                   in (Assigned bid, ([addAttr (AttrVal "bhv-gen" (show bid)) (tag content)],
-                       s' { hsHtmlGens = (bid, cur) : hsHtmlGens s' } ))
+                   in (Assigned bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
+                       s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
 
 input :: String -> HtmlM (Behaviour a)
 input t = htmlGen ("input_"++t) (Tag "input" [AttrVal "type" t]) (return ())
@@ -475,16 +596,6 @@ instance BhvPrim (BhvHtmlB a) () (HtmlM (Behaviour a)) where
 toHtmlB :: (ToHtmlBehaviour h) => Behaviour a -> Behaviour h -> Behaviour (HtmlM (Behaviour a))
 toHtmlB v x = Prim $ BhvHtmlB (toHtml x) v
 
-
-data HaskToBhv a b = HaskToBhv (Behaviour a -> Behaviour b)
-instance BhvPrim (HaskToBhv a b) a b where
-        bhvPrim (HaskToBhv f) = do iid <- htmlUniq; ji <- bhvValue $ Assigned iid
-                                   addBehaviour' iid "hask_to_bhv_inner" []
-                                   jf <- bhvValue (f $ Assigned iid)
-                                   return ("hask_to_bhv", [ji, jf])
-
-haskToBhv :: (Behaviour a -> Behaviour b) -> BehaviourFun a b
-haskToBhv = Prim . HaskToBhv
 
 b_uncurry :: (Behaviour a -> Behaviour b -> c) -> Behaviour (a, b) -> c
 b_uncurry f x = f (fst . x) (snd . x)
@@ -753,7 +864,7 @@ instance BFunctor JSObject where
 {- Other functions -}
 
 b_unsafeCoerce :: Behaviour a -> Behaviour b
-b_unsafeCoerce = (.) (Assigned 0)
+b_unsafeCoerce = (.) (Assigned (0,0))
 
 b_typeof' :: Behaviour JSValue -> Behaviour JSString
 b_typeof' = unOp "typeof"
@@ -844,14 +955,14 @@ class BehaviourToHtml a where
         bhv :: Behaviour (HtmlM a) -> HtmlM a
 
 instance BehaviourToHtml () where
-    bhv x = do id <- addBehaviour x
+    bhv x = do ~(_,id) <- addBehaviour x
                cur <- gets hsHtmlCurrent
                HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 instance BehaviourToHtml (Behaviour a) where
-    bhv x = do id <- addBehaviour x
+    bhv x = do ~(r,id) <- addBehaviour x
                cur <- gets hsHtmlCurrent
-               jbhv <- bhvValue (Assigned id :: Behaviour (HtmlM (Behaviour a)))
+               jbhv <- bhvValue (Assigned (r,id) :: Behaviour (HtmlM (Behaviour a)))
                nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
                HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
@@ -990,3 +1101,12 @@ renderH (HtmlM f) = do
 
 htmlUniq :: HtmlM Int
 htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
+
+
+htmlLocal :: HtmlM a -> HtmlM a
+htmlLocal action = do
+    state <- get
+    put $ emptyHtmlState { hsRecursion = hsRecursion state + 1 }
+    result <- action
+    put state
+    return result

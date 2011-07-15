@@ -26,6 +26,22 @@ function r_prim_uncurry(f) {
 	}); };
 }
 
+function r_prim_bhv_pack() {
+	var bhv = this;
+	this.compute = function(x) { return new Thunk(function() {
+		var res = new BhvFun();
+		r_prim_const.call(res, x);
+		res.add_depend(bhv);
+		return res;
+	}); };
+}
+
+function r_prim_bhv_unpack() {
+	this.compute = function(x) { return new Thunk(function() {
+		return x.get().compute(cthunk({})).get();
+	}); };
+}
+
 function r_prim_add_attr() {
         this.compute_ = function(params) {
                 var name, value;

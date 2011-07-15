@@ -6,7 +6,7 @@ var r_event_deps = {};
 var r_cur_bhv = null;
 
 
-var r_bhv_fun = {};
+var r_bhv_fun_0 = {};
 var r_current_time = 0;
 
 
@@ -118,8 +118,8 @@ function BhvFun(id) {
 
 
 function r_init() {
-	for (i in r_bhv_fun)
-		r_bhv_fun[i].init();
+	for (i in r_bhv_fun_0)
+		r_bhv_fun_0[i].init();
 }
 
 
