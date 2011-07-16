@@ -345,12 +345,6 @@ eitherToResult (Right x) = Ok x
 eitherToResult (Left e) = Error e
 -}
 
-sget' :: String -> Behaviour (Maybe JSValue)
-sget' = Prim . BhvServer "sget" . toJSString
-
-sget :: BJSON a => String -> Behaviour (Maybe a)
-sget = b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON) . sget'
-
 
 
 
@@ -466,10 +460,6 @@ instance BhvPrim AddAttr Html Html where
                 return ("add_attr", [jname, jval])
 
 
-b_appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
-b_appendHtml = binOp "append_html"
-
-
 
 jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
 reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
@@ -521,80 +511,14 @@ container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
 tag :: String -> Html
 tag name = HtmlM $ \s -> ((), ([Tag name [] []], s))
 
-
-head content = container "head" $ do
-        jquery
-        reactive
-        reactive_prim
-        content
-
-body content = container "body" $ do
-        content
-        initReactive
-
-
-a = container "a"
-br = tag "br"
-div = container "div"
-html = container "html"
-li = container "li"
 script = container "script"
 span = container "span"
-title = container "title"
-ul = container "ul"
 
-name = AttrVal "name"
 type_ = AttrVal "type"
 src = AttrVal "src"
-style = AttrVal "style"
-
-htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Behaviour a)
-htmlGen name tag (HtmlM f) = do
-    bid@(~(_,i)) <- addBehaviourName ("gen_"++name) []
-    cur <- gets hsHtmlCurrent
-    HtmlM $ \s -> let (_, (content, s')) = f s
-                   in (Assigned bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
-                       s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
-
-input :: String -> HtmlM (Behaviour a)
-input t = htmlGen ("input_"++t) (Tag "input" [AttrVal "type" t]) (return ())
 
 
 
-data ToHtmlHtmlList = ToHtmlHtmlList
-
-class ToHtmlBehaviour a where
-        toHtml :: Behaviour a -> Behaviour Html
-
-instance ToHtmlBehaviour Html where
-        toHtml = id
-
-instance ToHtmlBehaviour Int where
-        toHtml = unOp "to_html_int"
-
-instance ToHtmlBehaviour String where
-        toHtml = toHtml . b_toJSString
-
-instance ToHtmlBehaviour JSString where
-        toHtml = unOp "to_html_jsstring"
-
-
-instance ToHtmlBehaviour [Html] where
-        toHtml = b_foldl b_appendHtml (cb $ div $ return ())
-
-instance ToHtmlBehaviour a => ToHtmlBehaviour (Maybe a) where
-        toHtml = b_maybe (cb $ div $ return ()) toHtml
-
-
-data BhvHtmlB a = BhvHtmlB (Behaviour Html) (Behaviour a)
-instance BhvPrim (BhvHtmlB a) () (HtmlM (Behaviour a)) where
-        bhvPrim (BhvHtmlB html b) = do
-                bid <- addBehaviour b
-                htmlv <- bhvValue $ html ! AttrVal "bhv-gen" (show bid)
-                return ("const", [htmlv])
-
-toHtmlB :: (ToHtmlBehaviour h) => Behaviour a -> Behaviour h -> Behaviour (HtmlM (Behaviour a))
-toHtmlB v x = Prim $ BhvHtmlB (toHtml x) v
 
 
 b_uncurry :: (Behaviour a -> Behaviour b -> c) -> Behaviour (a, b) -> c
@@ -621,184 +545,24 @@ instance (BhvCurrying (Behaviour b -> r) ps r') =>
 
 {- Basic classes and functions -}
 
-
-class BEq a where
-        (~==) :: Behaviour a -> Behaviour a -> Behaviour Bool
-        x ~== y = b_not $ x ~/= y
-        (~/=) :: Behaviour a -> Behaviour a -> Behaviour Bool
-        x ~/= y = b_not $ x ~== y
-
-
-class BFunctor f where
-        b_fmap :: (Behaviour a -> Behaviour b) -> (Behaviour (f a)) -> (Behaviour (f b))
-
-
-class BFunctor m => BMonad m where
-        b_return :: Behaviour a -> Behaviour (m a)
-
-        (~>>=) :: Behaviour (m a) -> (Behaviour a -> Behaviour (m b)) -> Behaviour (m b)
-        x ~>>= f = b_join $ b_fmap f x
-
-        b_join :: Behaviour (m (m a)) -> Behaviour (m a)
-        b_join = (~>>= id)
-
-
+{-
 b_liftM2 :: (BMonad m) => (Behaviour a -> Behaviour b -> Behaviour c) ->
         Behaviour (m a) -> Behaviour (m b) -> Behaviour (m c)
 b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
-
-
-{- Int instances -}
-
-instance BEq Int where (~==) = binOp "eq"
-
-instance BJSON Int where
-        b_readJSON x = b_ite (b_typeof x ~== "number") (b_result_ok $ b_unsafeCoerce x) (b_result_error "readJSON: not a number")
-        b_writeJSON = b_unsafeCoerce
-
-
-{- Char instances -}
-
-instance BEq Char where (~==) = binOp "eq"
-
-
-{- Bool constructors, destructor, instances and functions -}
-
-b_true :: Behaviour Bool
-b_true = primFunc "true"
-
-b_false :: Behaviour Bool
-b_false = primFunc "false"
-
-b_bool :: Behaviour a -> Behaviour a -> Behaviour Bool -> Behaviour a
-b_bool = terOp "bool"
-
-b_ite c t f = b_bool t f c
-
-instance BEq Bool where
-        x ~== y = b_bool y (b_not y) x
-
-b_not :: Behaviour Bool -> Behaviour Bool
-b_not = b_bool b_false b_true
-
-(~&&) :: Behaviour Bool -> Behaviour Bool -> Behaviour Bool
-x ~&& y = b_bool y x x
-
-(~||) :: Behaviour Bool -> Behaviour Bool -> Behaviour Bool
-x ~|| y = b_bool x y x
-
-
-{- Tuple instances -}
-
-instance BFunctor ((,) a) where
-        b_fmap f x = (fst . x) &&& f (snd . x)
-
-
-{- List constructors, destructor, instances and functions -}
-
-b_nil :: Behaviour [a]
-b_nil = primFunc "nil"
-
-(~:) :: Behaviour a -> Behaviour [a] -> Behaviour [a]
-(~:) = binOp "cons"
-infixr 5 ~:
-
-b_list :: Behaviour b -> (Behaviour a -> Behaviour [a] -> Behaviour b) -> Behaviour [a] -> Behaviour b
-b_list n c = terOp "list" n (cb $ haskToBhv $ b_uncurry c)
-
-instance BEq a => BEq [a] where
-        (~==) = bfix $ (\z -> \xs ys -> b_list (b_null ys) (\x xs' -> b_list b_false (\y ys' -> (x ~== y) ~&& z xs' ys') ys) xs)
-
-instance BFunctor [] where
-        b_fmap = b_map
-
-instance BMonad [] where
-        b_return = (~:b_nil)
-        b_join = b_concat
-
-(~++) :: Behaviour [a] -> Behaviour [a] -> Behaviour [a]
-xs ~++ ys = bfix (\f -> b_list ys (\x xs' -> x ~: f xs')) xs
-
-b_head :: Behaviour [a] -> Behaviour a
-b_head = b_list (b_error "Reactive.head") (\x _ -> x)
-
-b_tail :: Behaviour [a] -> Behaviour [a]
-b_tail = b_list (b_error "Reactive.tail") (\_ xs -> xs)
-
-b_null :: Behaviour [a] -> Behaviour Bool
-b_null = b_list b_true (\_ _ -> b_false)
-
-b_length :: Behaviour [b] -> Behaviour Int
-b_length = bfix (\f -> b_list 0 (\_ xs -> 1 + f xs))
-
-b_map :: (Behaviour a -> Behaviour b) -> Behaviour [a] -> Behaviour [b]
-b_map f = bfix (\m -> b_list b_nil (\x xs -> f x ~: m xs))
-
-b_foldl :: (Behaviour a -> Behaviour b -> Behaviour a) -> Behaviour a -> Behaviour [b] -> Behaviour a
-b_foldl f = bfix (\fld -> \z -> b_list z (\x xs -> fld (f z x) xs))
-
-b_foldr :: (Behaviour a -> Behaviour b -> Behaviour b) -> Behaviour b -> Behaviour [a] -> Behaviour b
-b_foldr f z = bfix (\fld -> b_list z (\x xs -> x `f` fld xs))
-
-b_concat :: Behaviour [[a]] -> Behaviour [a]
-b_concat = b_foldr (~++) b_nil
-
-b_and :: Behaviour [Bool] -> Behaviour Bool
-b_and = b_foldr (~&&) b_true
-
-b_or :: Behaviour [Bool] -> Behaviour Bool
-b_or = b_foldr (~||) b_false
-
-b_all :: (Behaviour a -> Behaviour Bool) -> Behaviour [a] -> Behaviour Bool
-b_all f = b_and . b_map f
-
-b_lookup :: (BEq a) => Behaviour a -> Behaviour [(a,b)] -> Behaviour (Maybe b)
-b_lookup k = bfix $ \f -> b_list b_nothing $ \x xs -> flip b_uncurry x $ \k' v -> b_ite (k'~==k) (b_just v) (f xs)
-
-b_zip :: Behaviour [a] -> Behaviour [b] -> Behaviour [(a, b)]
-b_zip = b_zipWith (&&&)
-
-b_zipWith :: (Behaviour a -> Behaviour b -> Behaviour c) -> Behaviour [a] -> Behaviour [b] -> Behaviour [c]
-b_zipWith f = bfix $ (\z -> \xs ys -> b_list b_nil (\x xs' -> b_list b_nil (\y ys' -> f x y ~: z xs' ys') ys) xs)
-
-
-{- Maybe constructors, destructor, instances and functions -}
-
-b_nothing :: Behaviour (Maybe a)
-b_nothing = primFunc "nothing"
-
-b_just :: Behaviour a -> Behaviour (Maybe a)
-b_just = unOp "just"
-
-b_maybe :: Behaviour b -> (Behaviour a -> Behaviour b) -> Behaviour (Maybe a) -> Behaviour b
-b_maybe def f = terOp "maybe" def (cb $ haskToBhv f)
-
-instance BEq a => BEq (Maybe a) where
-        x ~== y = b_maybe (b_maybe b_true (const b_false) y) (\xv -> b_maybe b_false (xv ~==) y) x
-
-instance BFunctor Maybe where
-        b_fmap f = b_maybe b_nothing (b_just . f)
-
-instance BMonad Maybe where
-        b_return = b_just
-        x ~>>= f = b_maybe b_nothing f x
-        b_join = b_maybe b_nothing id
-
-b_fromJust :: Behaviour (Maybe b) -> Behaviour b
-b_fromJust = b_maybe (b_error "fromJust: Nothing") id
+-}
 
 
 
 {- Timed constructors, destructor and instances -}
 
-b_notYet :: Behaviour (Timed a)
-b_notYet = primFunc "not_yet"
+notYet :: Behaviour (Timed a)
+notYet = primFunc "not_yet"
 
-b_onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
-b_onTime = binOp "on_time"
+onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
+onTime = binOp "on_time"
 
-b_timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
-b_timed def f = terOp "timed" def (cb $ haskToBhv $ b_uncurry f)
+timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
+timed def f = terOp "timed" def (cb $ haskToBhv $ b_uncurry f)
 
 data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
 instance BhvPrim (TimedFold a b) () a where
@@ -808,31 +572,10 @@ instance BhvPrim (TimedFold a b) () a where
         jev <- bhvValue ev
         return ("timed_fold", [jstep, jdef, jev])
 
-b_timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
-b_timedFold f x = Prim . TimedFold f x
+timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
+timedFold f x = Prim . TimedFold f x
 
 
-instance BFunctor Timed where
-    b_fmap f = b_timed b_notYet (\t x -> b_onTime t (f x))
-
-
-{- Result constructors and destructor -}
-
-b_result_ok :: Behaviour a -> Behaviour (Result a)
-b_result_ok = unOp "result_ok"
-
-b_result_error :: Behaviour String -> Behaviour (Result a)
-b_result_error = unOp "result_error"
-
-b_result :: (Behaviour String -> Behaviour b) -> (Behaviour a -> Behaviour b) -> Behaviour (Result a) -> Behaviour b
-b_result a b = terOp "result" (cb $ haskToBhv a) (cb $ haskToBhv b)
-
-
-{- JSON types, functions and instances -}
-
-class BJSON a where
-        b_readJSON :: Behaviour JSValue -> Behaviour (Result a)
-        b_writeJSON :: Behaviour a -> Behaviour JSValue
 
 
 b_toJSString :: Behaviour String -> Behaviour JSString
@@ -840,39 +583,6 @@ b_toJSString = unOp "to_js_string"
 
 b_fromJSString :: Behaviour JSString -> Behaviour String
 b_fromJSString = unOp "from_js_string"
-
-instance BEq JSString where
-        (~==) = binOp "eq"
-
-
-b_toJSObject' :: Behaviour [(JSString, a)] -> Behaviour (JSObject a)
-b_toJSObject' = unOp "to_js_object"
-
-b_toJSObject :: Behaviour [(String, a)] -> Behaviour (JSObject a)
-b_toJSObject = b_toJSObject' . b_map (\x -> b_toJSString (fst . x) &&& (snd . x))
-
-b_fromJSObject' :: Behaviour (JSObject a) -> Behaviour [(JSString, a)]
-b_fromJSObject' = unOp "from_js_object"
-
-b_fromJSObject :: Behaviour (JSObject a) -> Behaviour [(String, a)]
-b_fromJSObject = b_map (\x -> b_fromJSString (fst . x) &&& (snd . x)) . b_fromJSObject'
-
-instance BFunctor JSObject where
-        b_fmap f = binOp "js_object_fmap" (cb $ haskToBhv f)
-
-
-{- Other functions -}
-
-b_unsafeCoerce :: Behaviour a -> Behaviour b
-b_unsafeCoerce = (.) (Assigned (0,0))
-
-b_typeof' :: Behaviour JSValue -> Behaviour JSString
-b_typeof' = unOp "typeof"
-
-b_typeof :: Behaviour JSValue -> Behaviour String
-b_typeof = b_fromJSString . b_typeof'
-
-
 
 
 data BhvEnumFromTo = BhvEnumFromTo
@@ -913,11 +623,20 @@ unOp  name x     = primFunc name .  x
 binOp name x y   = primFunc name . (x &&& y)
 terOp name x y z = primFunc name . (x &&& y &&& z)
 
+primOp :: String -> BhvFun a b
+primOp = Prim . BhvPrimFunc
+
+primOp1 name a         = primOp name . (cbf a)
+primOp2 name a b       = primOp name . (cbf a &&& cbf b)
+primOp3 name a b c     = primOp name . (cbf a &&& cbf b &&& cbf c)
+primOp4 name a b c d   = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d)
+primOp5 name a b c d e = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d &&& cbf e)
+
 bjoin :: Behaviour (BehaviourFun a b) -> BehaviourFun a b
 bjoin = Prim . BhvModifier "bjoin"
 
-b_fix :: (Behaviour a -> Behaviour a) -> Behaviour a
-b_fix = unOp "fix" . cb . haskToBhv
+b_fix :: forall a. (Behaviour a -> Behaviour a) -> Behaviour a
+b_fix = primOp1 "fix"
 
 
 class BhvFix a where
@@ -980,13 +699,6 @@ newBhv = undefined
 bhv <-- html = undefined
 
 
-post' :: String -> Behaviour (Timed (JSObject JSString)) -> HtmlM (Behaviour (Maybe JSValue))
-post' name x = fmap Assigned $ addBehaviour $ (Prim $ BhvServer "spost" $ toJSString name) . x
-
-post :: (BJSON a) => String -> Behaviour (Timed [(String,String)]) -> HtmlM (Behaviour (Maybe a))
-post name = fmap (b_join . b_fmap (b_result (const b_nothing) b_just . b_readJSON)) .
-    post' name . b_fmap (b_toJSObject . b_fmap (b_fmap b_toJSString))
-
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
 
@@ -1006,47 +718,6 @@ instance IsString (Behaviour Html) where
 instance IsString (Behaviour String) where
         fromString = cb
 
-
-b_error' :: Behaviour JSString -> Behaviour a
-b_error' = unOp "error"
-
-b_error :: Behaviour String -> Behaviour a
-b_error = b_error' . b_toJSString
-
-b_undefined = b_error "undefined"
-
-b_guardTimed :: (Behaviour a -> Behaviour Bool) -> Behaviour (Timed a) -> Behaviour (Timed a)
-b_guardTimed f tx = b_ite (b_timed b_false (const f) tx) tx b_notYet
-
-
-form' :: HtmlM a -> HtmlM (Behaviour (Timed (JSObject JSString)))
-form' = htmlGen "form" (Tag "form" [])
-
-form :: HtmlM a -> HtmlM (Behaviour (Timed [(String, String)]))
-form = fmap (b_fmap (b_fromJSObject . b_fmap b_fromJSString)) . form'
-
-t2m :: Behaviour (Timed a) -> Behaviour (Maybe a)
-t2m = b_timed b_nothing (const b_just)
-
-textfield' :: String -> HtmlM (Behaviour JSString)
-textfield' n = input "text" ! name n
-
-textfield :: String -> HtmlM (Behaviour String)
-textfield = fmap b_fromJSString . textfield'
-
-submit' :: HtmlM (Behaviour (Timed JSString))
-submit' = input "submit"
-
-submit :: HtmlM (Behaviour (Timed String))
-submit = fmap (b_fmap b_fromJSString) $ submit'
-
-button :: HtmlM (Bhv (Timed ()))
-button = input "button"
-
-(~<) :: BehaviourFun a Int -> BehaviourFun a Int -> BehaviourFun a Bool
-(~<) = binOp "lt_int"
-
-x ~>= y = b_not (x ~< y)
 
 
 

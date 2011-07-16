@@ -118,7 +118,7 @@ function r_prim_fix() {
         this.compute = function(x, env) {
                 var thunk;
                 thunk = new Thunk(function() {
-                        return x.get().compute(thunk, env).get();
+			return x.get()(thunk).get();
                 });
                 return thunk;
         }
@@ -469,17 +469,16 @@ function r_prim_cons() {
 }
 
 function r_prim_list() {
-	var b = this;
-	this.compute = function(params, env) {
-		var y1 = params.get()[0];
-		var y2 = params.get()[1].get()[0];
-		var x = params.get()[1].get()[1];
+	this.compute = function(params) { return new Thunk(function() {
+		var b1 = params.get()[0];
+		var b2 = params.get()[1].get()[0];
+		var x = params.get()[1].get()[1].get();
 
-		if (typeof x.get().nil != 'undefined')
-			return y1;
-		if (typeof x.get().cons != 'undefined')
-			return y2.get().compute(cthunk(x.get().cons), env);
-	};
+		if (typeof x.nil != 'undefined')
+			return b1.get();
+		if (typeof x.cons != 'undefined')
+			return b2.get()(x.cons[0]).get()(x.cons[1]).get();
+	}); };
 }
 
 
@@ -494,15 +493,15 @@ function r_prim_just() {
 }
 
 function r_prim_maybe() {
-	this.compute_unbox = function(params, env) {
+	this.compute = function(params) { return new Thunk(function() {
                 var def = params.get()[0];
                 var func = params.get()[1].get()[0];
                 var mb = params.get()[1].get()[1];
 
                 if (typeof mb.get().Just == 'undefined')
-			return def;
-		return func.get().compute(mb.get().Just, env);
-	};
+			return def.get();
+		return func.get()(mb.get().Just).get();
+	}); };
 }
 
 
