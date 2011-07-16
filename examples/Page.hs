@@ -30,3 +30,18 @@ page2 = html $ do
     body $ do
         let count = sget "count" :: Bhv (Maybe Int)
         bhv $ toHtml count
+
+
+{- Example 3 – event folds -}
+
+page3 = html $ do
+    head_ $ do
+        title "Rawe - example 3"
+    body $ do
+        a <- button ! value "+1"
+        bhv $ toHtml $ timedFold (const (+)) (0::Bhv Int) $ fmap (const 1) a
+        br
+
+        text <- textfield "text"
+        addtext <- button ! value "->"
+        bhv $ toHtml $ timedFold (const (++)) "" $ fmap (const text) addtext

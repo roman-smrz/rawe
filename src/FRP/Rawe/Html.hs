@@ -162,6 +162,8 @@ ul = container "ul"
 
 name = AttrVal "name"
 style = AttrVal "style"
+value = AttrVal "value"
+
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Bhv a)
 htmlGen name tag (HtmlM f) = do
