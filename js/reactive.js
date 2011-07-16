@@ -73,8 +73,10 @@ function BhvFun(id) {
 
                 if (this.html) {
 			var n = this.compute(cthunk(null)).get();
-			this.html.replaceWith(n);
-			this.html = n;
+			if (this.html != n) {
+				this.html.replaceWith(n);
+				this.html = n;
+			}
                 }
 
                 for (i in this.rdepend)
