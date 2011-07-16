@@ -293,32 +293,38 @@ function r_prim_sget(name) {
         };
 }
 
-function r_prim_spost(name) {
-        var results = {};
-        var b = this;
+function r_prim_post(name, signal) {
+	var result = cthunk( { NotYet: null } );
+	var last_result = -1;
+	var b = this;
 
-        this.compute = function(x) { return new Thunk(function() {
-                if (typeof x.get().Timed == 'undefined')
-                        return { Nothing: null };
+	this.add_depend(signal.get());
 
-                var time = x.get().Timed[0].get();
-                if (typeof results[time] != 'undefined')
-                        return results[time]
-                results[time] = { Nothing: null };
+	this.invalidate = function() {
+		var x = signal.get().compute(cthunk(null)).get();
 
-		var obj = x.get().Timed[1].get();
+		if (typeof x.Timed == 'undefined' || x.Timed[0].get() <= this.last_change)
+			return;
+
+		this.last_change = x.Timed[0].get();
+
+		var obj = x.Timed[1].get();
 		var post = {};
 		for (i in obj) post[i] = obj[i].get();
 
 		$.post(document.location.href+'?q='+name.get(), post, function(json) {
-			var x = jQuery.parseJSON(json);
-			results[time] = { Just: cthunk(x) };
-                        r_current_time++;
-                        b.invalidate();
-                });
+			if (last_result > x.Timed[0].get())
+				return;
 
-                return { Nothing: null };
-        }); };
+			var y = $.parseJSON(json);
+			result = cthunk( { Just: cthunk(y) } );
+			r_current_time++;
+			for (i in b.rdepend)
+				b.rdepend[i].invalidate();
+		});
+	};
+
+	this.compute = function() { return result; };
 }
 
 function r_prim_to_html_int() {

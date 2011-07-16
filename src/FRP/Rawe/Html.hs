@@ -119,7 +119,10 @@ sget :: BJSON a => String -> Bhv (Maybe a)
 sget = R.join . R.fmap (result (const R.nothing) R.just . readJSON) . sget'
 
 post' :: String -> Bhv (Timed (JSObject JSString)) -> HtmlM (Bhv (Maybe JSValue))
-post' name x = fmap Assigned $ addBehaviour $ (Prim $ BhvServer "spost" $ J.toJSString name) . x
+post' name signal = do jname <- bhvValue $ J.toJSString name
+                       jsignal <- bhvValue signal
+                       fmap Assigned $ addBehaviourName "post" [jname, jsignal]
+
 
 post :: (BJSON a) => String -> Bhv (Timed [(String,String)]) -> HtmlM (Bhv (Maybe a))
 post name = fmap (R.join . R.fmap (result (const R.nothing) R.just . readJSON)) .
