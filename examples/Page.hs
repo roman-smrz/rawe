@@ -45,3 +45,17 @@ page3 = html $ do
         text <- textfield "text"
         addtext <- button ! value "->"
         bhv $ toHtml $ timedFold (const (++)) "" $ fmap (const text) addtext
+
+
+{- Example 4 - sending form data -}
+
+page4 = html $ do
+    head_ $ do
+        title "Rawe - example 4"
+    body $ do
+        req <- form $ do textfield "a"; br
+                         str "+"; br
+                         textfield "b"; br
+                         submit ! value "="
+        sum <- post "sum" req :: HtmlM (Bhv (Maybe Int))
+        bhv $ toHtml sum

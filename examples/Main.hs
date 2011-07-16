@@ -20,6 +20,13 @@ main = do
                  ok $ toResponse $ case name of
                                         "count" -> "42" :: String
 
+            , do methodM POST
+                 decodeBody $ defaultBodyPolicy "/tmp/" 0 1000 1000
+                 name <- look "q"
+                 case name of
+                      "sum" -> do a <- look "a"; b <- look "b"
+                                  ok $ toResponse $ show $ (read a) + (read b :: Int)
+
             , return $ setHTML $ toResponse $ render example
             ]
 
