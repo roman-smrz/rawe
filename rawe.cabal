@@ -1,0 +1,20 @@
+Name:                rawe
+Version:             0.0
+Category:            FRP, Web
+Synopsis:            ReActive Web – functional reactive programming framework for web
+Description:         ReActive Web – functional reactive programming framework
+                     for developement of web applications.
+License:             BSD3
+License-file:        LICENSE
+Author:              Roman Smrž
+Maintainer:          Roman Smrž <roman.smrz@seznam.cz>
+Build-Type:          Simple
+Cabal-Version:       >=1.2
+
+extra-source-files:  examples/Main.hs examples/Page.hs examples/Makefile js/reactive.js js/reactive-prim.js
+
+Library
+  Build-Depends:     base >= 3 && < 5, mtl, void, categories, json
+  Exposed-modules:   FRP.Rawe, FRP.Rawe.Prelude, FRP.Rawe.Html
+  ghc-options:       
+  hs-source-dirs:    src
