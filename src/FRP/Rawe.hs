@@ -13,13 +13,16 @@ module FRP.Rawe where
 
 import Prelude hiding (head,div,(.),id,fst,snd,span)
 
+import Control.Categorical.Bifunctor
 import Control.Category
+import Control.Category.Associative
+import Control.Category.Braided
 import Control.Category.Cartesian
 import Control.Category.Cartesian.Closed
-import Control.Functor
+import Control.Category.Monoidal
 
 import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (Product)
 
 import Data.String
 import Data.Void
@@ -155,36 +158,40 @@ instance Category BehaviourFun where
         x@(Assigned _) . y@(Assigned _) = Prim $ BhvModifier2 "compose" y x
 
 
-instance PFunctor (,) BehaviourFun BehaviourFun where
-    first = first'
+instance PFunctor (,) BhvFun BhvFun where
+    first = firstDefault
 
-instance QFunctor (,) BehaviourFun BehaviourFun where
-    second = second'
+instance QFunctor (,) BhvFun BhvFun where
+    second = secondDefault
 
-instance Bifunctor (,) BehaviourFun BehaviourFun BehaviourFun where
-    bimap = bimapPreCartesian
+instance Bifunctor (,) BhvFun BhvFun BhvFun where
+    bimap = bimapProduct
 
-instance Braided BehaviourFun (,) where
-    braid = braidPreCartesian
+instance Braided BhvFun (,) where
+    braid = braidProduct
 
-instance Associative BehaviourFun (,) where
-    associate = associatePreCartesian
+instance Symmetric BhvFun (,)
 
-instance Coassociative BehaviourFun (,) where
-    coassociate = coassociatePreCartesian
+instance Associative BhvFun (,) where
+    associate = associateProduct
 
-instance PreCartesian BehaviourFun (,) where
-        x &&& y = Prim $ BhvModifier2 "product" x y
-        fst = primFunc "fst"
-        snd = primFunc "snd"
+instance Disassociative BhvFun (,) where
+    disassociate = disassociateProduct
 
-instance HasIdentity BhvFun (,) Void
+type instance Id BhvFun (,) = Void
 
-instance Monoidal BhvFun (,) Void where
+instance Monoidal BhvFun (,) where
     idl = snd
     idr = fst
 
-instance CCC BehaviourFun (,) (->) Void where
+instance PreCartesian BhvFun where
+    type Product BhvFun = (,)
+    x &&& y = Prim $ BhvModifier2 "product" x y
+    fst = primOp "fst"
+    snd = primOp "snd"
+
+instance CCC BhvFun where
+    type Exp BhvFun = (->)
     apply = primFunc "apply"
     curry = Prim . BhvModifier "curry"
     uncurry = Prim . BhvModifier "uncurry"
