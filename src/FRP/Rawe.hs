@@ -139,7 +139,7 @@ data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
                 | Assigned (Int, Int)
                 | (a ~ b) => BhvID
 
-type Bhv a = BehaviourFun () a
+type Bhv a = BehaviourFun Void a
 
 type BehaviourFun = BhvFun
 type Behaviour a = Bhv a
@@ -572,7 +572,7 @@ timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
 timed def f = terOp "timed" def (cb $ haskToBhv $ b_uncurry f)
 
 data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
-instance BhvPrim (TimedFold a b) () a where
+instance BhvPrim (TimedFold a b) Void a where
     bhvPrim (TimedFold step def ev) = do
         jstep <- bhvValue $ haskToBhv $ b_uncurryAll step
         jdef <- bhvValue def
