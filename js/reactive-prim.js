@@ -180,7 +180,7 @@ function r_prim_gen_input_button() {
 
 	b.value = cthunk({ NotYet: [] });
 	elem.click(function(e) {
-		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk([])] }));
+		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk([])] }));
 	});
 }
 
@@ -192,7 +192,7 @@ function r_prim_gen_input_submit() {
 
 	b.value = cthunk({ NotYet: [] });
 	elem.click(function(e) {
-		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(elem.val())] }));
+		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk(elem.val())] }));
 	});
 }
 
@@ -210,7 +210,7 @@ function r_prim_gen_form() {
 		elem.find('input, select, textarea').each(function() {
 			result[$(this).attr('name')] = cthunk( $(this).val() );
 		});
-		b.change(cthunk({ Timed: [cthunk(++r_current_time), cthunk(result)] }));
+		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk(result)] }));
 	});
 }
 
@@ -303,17 +303,17 @@ function r_prim_post(name, signal) {
 	this.invalidate = function() {
 		var x = signal.get().compute(cthunk(null)).get();
 
-		if (typeof x.Timed == 'undefined' || x.Timed[0].get() <= this.last_change)
+		if (typeof x.OnTime == 'undefined' || x.OnTime[0].get() <= this.last_change)
 			return;
 
-		this.last_change = x.Timed[0].get();
+		this.last_change = x.OnTime[0].get();
 
-		var obj = x.Timed[1].get();
+		var obj = x.OnTime[1].get();
 		var post = {};
 		for (i in obj) post[i] = obj[i].get();
 
 		$.post(document.location.href+'?q='+name.get(), post, function(json) {
-			if (last_result > x.Timed[0].get())
+			if (last_result > x.OnTime[0].get())
 				return;
 
 			var y = $.parseJSON(json);
@@ -519,7 +519,7 @@ function r_prim_not_yet() {
 
 function r_prim_on_time() {
 	this.compute = function(x) { return new Thunk(function() {
-		return { Timed: x.get() }
+		return { OnTime: x.get() }
 	}); };
 }
 
@@ -529,9 +529,9 @@ function r_prim_timed() {
                 var on_time = params.get()[1].get()[0];
                 var value = params.get()[1].get()[1];
 
-                if (typeof value.get().Timed == 'undefined')
+		if (typeof value.get().OnTime == 'undefined')
 			return not_yet;
-		return on_time.get().compute(cthunk( value.get().Timed ), env);
+		return on_time.get().compute(cthunk( value.get().OnTime ), env);
 	};
 }
 
@@ -540,8 +540,8 @@ function r_prim_timed_map() {
                 var f = params.get()[0];
                 var x = params.get()[1];
 
-                if (typeof x.get().Timed != 'undefined')
-                        return { Timed: [ x.get().Timed[0], f.get().compute(x.get().Timed[1], env) ] };
+		if (typeof x.get().OnTime != 'undefined')
+			return { OnTime: [ x.get().OnTime[0], f.get().compute(x.get().OnTime[1], env) ] };
                 return x.get();
         }); };
 }
@@ -559,9 +559,9 @@ function r_prim_timed_fold(step, def, ev) {
 		if (!b.valid) {
 			var timed = ev.compute(cthunk([]), env).get();
 
-			if (timed.Timed && timed.Timed[0].get() > last_recomp) {
-				value = step.compute(cthunk( [ timed.Timed[0], cthunk( [ value, timed.Timed[1] ] ) ] ), env);
-				last_recomp = timed.Timed[0].get();
+			if (timed.OnTime && timed.OnTime[0].get() > last_recomp) {
+				value = step.compute(cthunk( [ timed.OnTime[0], cthunk( [ value, timed.OnTime[1] ] ) ] ), env);
+				last_recomp = timed.OnTime[0].get();
 			}
 
 			b.valid = true;

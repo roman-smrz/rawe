@@ -333,7 +333,7 @@ instance BhvPrim (BhvServer a b) a b where
 
 data Time
 
-data Timed a = NotYet | Timed Time a
+data Timed a = NotYet | OnTime Time a
 
 {-
 instance JSON a => JSON (Timed a) where
@@ -343,10 +343,10 @@ instance JSON a => JSON (Timed a) where
                                              [jt, jx] <- resultToEither $ readJSON params
                                              t <- resultToEither $ readJSON jt
                                              x <- resultToEither $ readJSON jx
-                                             return $ Timed t x
+                                             return $ OnTime t x
 
-        showJSON NotYet      = JSObject $ toJSObject [("NotYet", JSNull)]
-        showJSON (Timed t x) = JSObject $ toJSObject [("Timed", showJSON [showJSON t, showJSON x])]
+        showJSON NotYet       = JSObject $ toJSObject [("NotYet", JSNull)]
+        showJSON (OnTime t x) = JSObject $ toJSObject [("OnTime", showJSON [showJSON t, showJSON x])]
 
 eitherToResult (Right x) = Ok x
 eitherToResult (Left e) = Error e
