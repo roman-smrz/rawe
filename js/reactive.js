@@ -64,6 +64,10 @@ function BhvFun(id) {
                 return new Thunk(function() { return b.compute_(x.get()) });
         }
 
+	this.html_inner = function(x) {
+		return this.compute(x).get().prop('rawe_html_inner');
+	}
+
         this.invalidate = function() {
                 if (this.last_change == r_current_time)
                         return;

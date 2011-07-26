@@ -63,7 +63,7 @@ function r_prim_bhv_to_html_inner(out) {
 	this.add_depend(out.get());
 
 	this.compute = function(x) { return new Thunk(function() {
-		var inner = out.get().html.prop('rawe_html_inner').get();
+		var inner = out.get().html_inner().get();
 		// TODO: clear old dependency
 		b.add_depend(inner);
 		return inner.compute(x).get();
@@ -348,19 +348,30 @@ function r_prim_append_html() {
 	};
 }
 
-function r_prim_typeof() {
-	this.compute_ = function(x) { return typeof x; }
+function r_prim_html_until(def, mb) {
+	this.add_depend(def.get());
+	this.add_depend(mb.get());
+
+	this.compute = function() { return new Thunk(function() {
+		var x = mb.get().compute().get();
+		var y = def.get().compute().get();
+
+		if (typeof(x.Just) != 'undefined') {
+			xj = x.Just.get();
+			xj.prop('rawe_html_inner', y.prop('rawe_html_inner'));
+			return xj;
+			return x.Just.get().prop('rawe_html_inner', y.prop('rawe_html_inner'));
+		}
+		return y;
+	}); };
+
+	this.html_inner = function() {
+		return def.get().html_inner();
+	}
 }
 
-function r_prim_until() {
-        this.compute = function(params) { return new Thunk(function() {
-                var def = params.get()[0];
-                var unt = params.get()[1];
-
-                if (typeof unt.get().Just != 'undefined')
-                        return unt.get().Just.get();
-                return def.get();
-        }); };
+function r_prim_typeof() {
+	this.compute_ = function(x) { return typeof x; }
 }
 
 

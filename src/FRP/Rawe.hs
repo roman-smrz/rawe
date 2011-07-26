@@ -710,14 +710,6 @@ b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
 
 
-b_until :: Behaviour (HtmlM (Behaviour a)) -> Behaviour (Maybe Html) -> Behaviour (HtmlM (Behaviour a))
-b_until = binOp "until"
-
-{-
-b_until :: Behaviour a -> Behaviour (Maybe a) -> Behaviour a
-b_until def = b_maybe def id
--}
-
 
 instance IsString (Behaviour Html) where
         fromString = cb . span . fromString

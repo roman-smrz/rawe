@@ -199,3 +199,8 @@ submit = fmap (R.fmap fromJSString) $ submit'
 
 button :: HtmlM (Bhv (Timed ()))
 button = input "button"
+
+
+
+until :: Bhv (HtmlM a) -> Bhv (Maybe Html) -> Bhv (HtmlM a)
+until x m = Prim $ BhvModifier2 "html_until" x m
