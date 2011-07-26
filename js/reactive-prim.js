@@ -324,6 +324,8 @@ function r_prim_post(name, signal) {
 		});
 	};
 
+	this.init = this.invalidate;
+
 	this.compute = function() { return result; };
 }
 

@@ -83,18 +83,20 @@ function BhvFun(id) {
 			this.rdepend[i].invalidate();
         }
 
-	this.init = function() {
+	this.init_dep = function() {
                 if (this.valid) return;
 		this.valid = true;
 
 		for (i in this.depend)
-			this.depend[i].init();
+			this.depend[i].init_dep();
 
                 if (this.html) {
 			var n = this.compute(cthunk(null)).get();
 			this.html.replaceWith(n);
 			this.html = n;
                 }
+
+		if (this.init) this.init();
 	}
 
 
@@ -121,7 +123,7 @@ function BhvFun(id) {
 
 function r_init() {
 	for (i in r_bhv_fun_0)
-		r_bhv_fun_0[i].init();
+		r_bhv_fun_0[i].init_dep();
 }
 
 
