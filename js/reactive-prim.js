@@ -459,11 +459,11 @@ function r_prim_js_object_fmap() {
 /* Bool constructors and destructor */
 
 function r_prim_true() {
-        this.compute_ = function() { return true; };
+        this.compute = function() { return cthunk(true); };
 }
 
 function r_prim_false() {
-        this.compute_ = function() { return false; };
+        this.compute = function() { return cthunk(false); };
 }
 
 function r_prim_bool() {
