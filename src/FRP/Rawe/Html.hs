@@ -3,17 +3,71 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 
-module FRP.Rawe.Html where
+module FRP.Rawe.Html (
+    -- * Data types
+    --
+    -- | The ones for representing JavaScript values are taken from the package
+    -- json.
+
+    JSString, JSObject, JSValue, Result(..),
+
+    -- * Converting to HTML
+
+    ToHtmlBhv(..), BJSON(..),
 
 
-import Prelude hiding (div, (.), fst, snd, id)
+    -- * Functions for HTML and JavaScript
+
+    -- ** Result constructors and destructor
+
+    result_ok, result_error, result,
+
+    -- ** Manipulating JSON
+
+    toJSObject', toJSObject, fromJSObject', fromJSObject,
+
+    -- ** Other functions
+
+    typeof', typeof,
+
+
+    -- * Page construction
+
+    -- ** Talking to a server
+
+    sget', sget,
+    post', post,
+
+    -- ** HTML elements
+
+    head_, body,
+    a, br, div, html, li, title, ul,
+
+    form', form,
+    textfield', textfield,
+    submit', submit,
+    button,
+
+    -- ** HTML attribuets
+
+    name, style, value,
+
+    -- ** Other functions
+
+    guardTimed, t2m,
+    appendHtml,
+    until,
+) where
+
+
+import Prelude hiding (div, (.), fst, snd, id, until)
 
 import Control.Category
 import Control.Category.Cartesian
 
 import Control.Monad.State
 
-import Text.JSON (JSString, JSObject, JSValue, Result)
+import Text.JSON (JSString, JSObject, JSValue, Result(..))
 import qualified Text.JSON as J
 
 
@@ -131,17 +185,6 @@ post name = fmap (R.join . R.fmap (result (const R.nothing) R.just . readJSON)) 
 
 
 
-guardTimed :: (Bhv a -> Bhv Bool) -> Bhv (Timed a) -> Bhv (Timed a)
-guardTimed f tx = R.ite (timed R.false (const f) tx) tx notYet
-
-t2m :: Bhv (Timed a) -> Bhv (Maybe a)
-t2m = timed R.nothing (const R.just)
-
-
-
-appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
-appendHtml = binOp "append_html"
-
 
 
 head_ content = container "head" $ do
@@ -162,10 +205,6 @@ html = container "html"
 li = container "li"
 title = container "title"
 ul = container "ul"
-
-name = AttrVal "name"
-style = AttrVal "style"
-value = AttrVal "value"
 
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Bhv a)
@@ -201,6 +240,21 @@ button :: HtmlM (Bhv (Timed ()))
 button = input "button"
 
 
+
+name = AttrVal "name"
+style = AttrVal "style"
+value = AttrVal "value"
+
+
+
+guardTimed :: (Bhv a -> Bhv Bool) -> Bhv (Timed a) -> Bhv (Timed a)
+guardTimed f tx = R.ite (timed R.false (const f) tx) tx notYet
+
+t2m :: Bhv (Timed a) -> Bhv (Maybe a)
+t2m = timed R.nothing (const R.just)
+
+appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
+appendHtml = binOp "append_html"
 
 until :: Bhv (HtmlM a) -> Bhv (Maybe Html) -> Bhv (HtmlM a)
 until x m = Prim $ BhvModifier2 "html_until" x m
