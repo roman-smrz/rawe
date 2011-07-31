@@ -29,19 +29,9 @@ import Data.Void
 
 import Text.JSON
 
+import FRP.Rawe.Internal
 
 import Debug.Trace
-
-
-data Attribute = AttrVal String String
-               | AttrBool String
-
-class Attributable b where
-        (!) :: b -> Attribute -> b
-
-
-newtype RawJS = RawJS { unRawJS :: String }
-instance IsString RawJS where fromString = RawJS
 
 
 
@@ -390,52 +380,6 @@ instance BhvValue (BhvFun a b) where
                     return $ RawJS $ "cthunk(r_bhv_fun_"++show r++"["++show i++"])"
 
 
-data HtmlState = HtmlState
-        { hsUniq :: Int
-        , hsBehaviours :: [(Int, String, [RawJS])]
-        , hsHtmlValues :: [(Int, String, Maybe String)]
-        , hsHtmlCurrent :: Maybe Int
-        , hsHtmlBehaviours :: [(Int, Maybe Int)]
-        , hsHtmlGens :: [(Int, Maybe Int)]
-        , hsRecursion :: Int
-        }
-
-emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0
-
-data HtmlStructure = Tag String [Attribute] [HtmlStructure]
-                   | Text String
-                   | Behaviour Int
-                   -- | Placeholder Int [Attribute]
-
-data HtmlM a = HtmlM (HtmlState -> (a, ([HtmlStructure], HtmlState)))
-
-type Html = HtmlM ()
-
-
-instance Functor HtmlM where
-        fmap f (HtmlM hf) = HtmlM $ \s -> (\(x, hs)->(f x, hs)) (hf s)
-
-instance Monad HtmlM where
-        return x = HtmlM $ \s -> (x, ([], s))
-        (HtmlM f) >>= g = HtmlM $ \s -> let (x, (cs, s')) = f s
-                                            (HtmlM g') = g x
-                                            (y, (ds, s'')) = g' s'
-                                         in (y, (cs++ds, s''))
-
-instance MonadFix HtmlM where
-        mfix f = HtmlM $ \s -> let (HtmlM f') = f x
-                                   (x, s') = f' s
-                                in (x, s')
-
-instance MonadState HtmlState HtmlM where
-        get = HtmlM $ \s -> (s, ([], s))
-        put s = HtmlM $ \_ -> ((), ([], s))
-
-
-instance IsString Html where
-        fromString text = HtmlM $ \s -> ((), ([Text text], s))
-str :: String -> Html
-str = fromString
 
 
 instance Attributable (HtmlM a) where

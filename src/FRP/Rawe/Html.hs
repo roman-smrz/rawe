@@ -7,9 +7,10 @@ module FRP.Rawe.Html (
     -- * Data types
     --
     -- | The ones for representing JavaScript values are taken from the package
-    -- json.
+    -- json; those for HTML values and attribuets are ours.
 
     JSString, JSObject, JSValue, Result(..),
+    HtmlM, Html, Attribute(..), (!),
 
     -- * Converting to HTML
 
@@ -54,6 +55,7 @@ module FRP.Rawe.Html (
 
     -- ** Other functions
 
+    str,
     guardTimed, t2m,
     appendHtml,
     until,
@@ -72,6 +74,7 @@ import qualified Text.JSON as J
 
 
 import FRP.Rawe
+import FRP.Rawe.Internal
 import qualified FRP.Rawe.Prelude as R
 
 
