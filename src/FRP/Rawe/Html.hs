@@ -194,7 +194,8 @@ instance R.BEq JSString where
         (==) = binOp "eq"
 
 
-{- Result constructors and destructor -}
+--------------------------------------------------------------------------------
+--  Result constructors and destructor
 
 result_ok :: Bhv a -> Bhv (Result a)
 result_ok = unOp "result_ok"
@@ -202,11 +203,12 @@ result_ok = unOp "result_ok"
 result_error :: Bhv String -> Bhv (Result a)
 result_error = unOp "result_error"
 
-result :: (Bhv String -> Bhv b) -> (Bhv a -> Bhv b) -> Bhv (Result a) -> Bhv b
-result a b = terOp "result" (cb $ haskToBhv a) (cb $ haskToBhv b)
+result :: (Bhv a -> Bhv b) -> (Bhv String -> Bhv b) -> Bhv (Result a) -> Bhv b
+result = primOp3 "result"
 
 
-{- JSON types, functions and instances -}
+--------------------------------------------------------------------------------
+--  JSON types, functions and instances
 
 toJSObject' :: Bhv [(JSString, a)] -> Bhv (JSObject a)
 toJSObject' = unOp "to_js_object"
@@ -221,7 +223,7 @@ fromJSObject :: Bhv (JSObject a) -> Bhv [(String, a)]
 fromJSObject = R.map (\x -> fromJSString (fst . x) &&& (snd . x)) . fromJSObject'
 
 instance R.BFunctor JSObject where
-        fmap f = binOp "js_object_fmap" (cb $ haskToBhv f)
+    fmap = primOp2 "js_object_fmap"
 
 
 {- Other functions -}
@@ -242,7 +244,7 @@ sget' :: String -> Bhv (Maybe JSValue)
 sget' = Prim . BhvServer "sget" . J.toJSString
 
 sget :: BJSON a => String -> Bhv (Maybe a)
-sget = R.join . R.fmap (result (const R.nothing) R.just . readJSON) . sget'
+sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
 
 post' :: String -> Bhv (Timed (JSObject JSString)) -> HtmlM (Bhv (Maybe JSValue))
 post' name signal = do jname <- bhvValue $ J.toJSString name
@@ -251,7 +253,7 @@ post' name signal = do jname <- bhvValue $ J.toJSString name
 
 
 post :: (BJSON a) => String -> Bhv (Timed [(String,String)]) -> HtmlM (Bhv (Maybe a))
-post name = fmap (R.join . R.fmap (result (const R.nothing) R.just . readJSON)) .
+post name = fmap (R.join . R.fmap (result R.just (const R.nothing) . readJSON)) .
     post' name . R.fmap (toJSObject . R.fmap (R.fmap toJSString))
 
 

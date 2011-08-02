@@ -449,7 +449,7 @@ function r_prim_js_object_fmap() {
 		var obj = params.get()[1].get();
 
 		var result = {};
-		for (i in obj) result[i] = f.compute(obj[i], env);
+		for (i in obj) result[i] = f(obj[i]);
 		return result;
 	}); };
 }
@@ -597,15 +597,15 @@ function r_prim_result_ok() {
 }
 
 function r_prim_result() {
-	this.compute_unbox = function(params, env) {
+	this.compute = function(params) { return new Thunk(function() {
 		var value = params.get()[1].get()[1].get();
 		for (i in value) {
 			var func;
 			switch (i) {
-				case 'Error': func = params.get()[0];
-				case 'Ok': func = params.get()[1].get()[0];
+				case 'Ok': func = params.get()[0]; break;
+				case 'Error': func = params.get()[1].get()[0]; break;
 			}
-			return func.get().compute(value[i][0], env);
+			return func.get()(value[i][0]).get();
 		}
-	};
+	}); };
 }
