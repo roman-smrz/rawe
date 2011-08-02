@@ -12,6 +12,7 @@ import Page
 example = page1
 
 main = do
+        putStrLn "--- Server started ---"
         simpleHTTP (nullConf { port = 8080 }) $ msum [ mzero
             , dir "js" $ serveDirectory DisableBrowsing [] "js"
 
