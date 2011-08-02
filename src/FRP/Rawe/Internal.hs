@@ -46,11 +46,6 @@ import Data.Void
 data Attribute = AttrVal String String  -- ^ Key-value pair
                | AttrBool String        -- ^ Boolean attribute
 
--- | Type class used to enable adding attributes to values of both types
--- Html and Html -> Html.
-class Attributable b where
-    (!) :: b -> Attribute -> b
-
 
 instance BhvValue Attribute where
     bhvValue (AttrVal name value) = do
@@ -59,6 +54,40 @@ instance BhvValue Attribute where
     bhvValue (AttrBool name) = do
         (RawJS jn) <- bhvValue name
         return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
+
+
+-- | Type class used to enable adding attributes to values of both types
+-- Html and Html -> Html.
+class Attributable b where
+    (!) :: b -> Attribute -> b
+
+instance Attributable (HtmlM a) where
+    (HtmlM f) ! a = HtmlM $ \s -> let (x, (cs, s')) = f s
+                                   in (x, (map (addAttr a) cs, s'))
+
+instance Attributable (HtmlM a -> HtmlM a) where
+    f ! a = \html -> HtmlM $ \s -> let (HtmlM g) = f html
+                                       (x, (t, s')) = g s
+                                    in (x, (map (addAttr a) t, s'))
+
+addAttr :: Attribute -> HtmlStructure -> HtmlStructure
+addAttr a (Tag name as content) = Tag name (a:as) content
+addAttr _ t = t
+
+instance Attributable (Bhv Html) where
+    (!) = primOp2 "add_attr"
+
+
+data AddAttr = AddAttr Attribute
+instance BhvPrim AddAttr Html Html where
+    bhvPrim (AddAttr (AttrVal name val)) = do
+        jname <- bhvValue name; jval <- bhvValue val
+        return ("add_attr", [jname, jval])
+    bhvPrim (AddAttr (AttrBool name)) = do
+        jname <- bhvValue name; jval <- bhvValue True
+        return ("add_attr", [jname, jval])
+
+
 
 
 -- | The structure of HTML tree.

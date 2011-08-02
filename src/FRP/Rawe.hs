@@ -21,7 +21,7 @@ module FRP.Rawe (
     render,
 
     -- * To be (re)moved
-    container, addAttr, tag, jquery,
+    container, tag, jquery,
     span, reactive, reactive_prim, initReactive,
     b_curry, b_uncurry, b_toJSString, b_fromJSString,
     BhvServer(..),
@@ -98,33 +98,11 @@ instance BhvPrim (BhvServer a b) a b where
 
 
 
-instance Attributable (HtmlM a) where
-        (HtmlM f) ! a = HtmlM $ \s -> let (x, (cs, s')) = f s
-                                       in (x, (map (addAttr a) cs, s'))
-
-instance Attributable (HtmlM a -> HtmlM a) where
-        f ! a = \html -> HtmlM $ \s -> let (HtmlM g) = f html
-                                           (x, (t, s')) = g s
-                                        in (x, (map (addAttr a) t, s'))
-
-instance Attributable (Behaviour Html) where
-        h ! a = binOp "add_attr" h (Prim $ BhvConst a)
 
 
-addAttr :: Attribute -> HtmlStructure -> HtmlStructure
-addAttr a (Tag name as content) = Tag name (a:as) content
-addAttr _ t@(Text _) = t
---addAttr a (Behaviour id) = Behaviour $ Prim (AddAttr a) . b
--- addAttr a (Placeholder p as) = Placeholder p (a:as)
 
-data AddAttr = AddAttr Attribute
-instance BhvPrim AddAttr Html Html where
-        bhvPrim (AddAttr (AttrVal name val)) = do
-                jname <- bhvValue name; jval <- bhvValue val
-                return ("add_attr", [jname, jval])
-        bhvPrim (AddAttr (AttrBool name)) = do
-                jname <- bhvValue name; jval <- bhvValue True
-                return ("add_attr", [jname, jval])
+
+
 
 
 
