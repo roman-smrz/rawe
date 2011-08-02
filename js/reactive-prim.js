@@ -26,7 +26,7 @@ function r_prim_uncurry(f) {
 	}); };
 }
 
-function r_prim_bhv_pack() {
+function r_prim_bhv_wrap() {
 	var bhv = this;
 	this.compute = function(x) { return new Thunk(function() {
 		var res = new BhvFun();
@@ -36,7 +36,7 @@ function r_prim_bhv_pack() {
 	}); };
 }
 
-function r_prim_bhv_unpack() {
+function r_prim_bhv_unwrap() {
 	this.compute = function(x) { return new Thunk(function() {
 		return x.get().compute(cthunk({})).get();
 	}); };

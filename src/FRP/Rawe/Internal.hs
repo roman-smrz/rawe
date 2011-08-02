@@ -39,6 +39,8 @@ import Control.Monad.Writer hiding (Product)
 import Data.String
 import Data.Void
 
+import Text.JSON as J
+
 
 -- * Basic definitions for HTML
 
@@ -160,6 +162,10 @@ instance MonadState HtmlState HtmlM where
     get = HtmlM $ \s -> (s, ([], s))
     put s = HtmlM $ \_ -> ((), ([], s))
 
+
+
+instance IsString (Bhv String) where
+        fromString = cb
 
 instance IsString Html where
     fromString text = HtmlM $ \s -> ((), ([Text text], s))
@@ -513,6 +519,35 @@ instance BhvPrim (TimedFold a b) Void a where
 
 timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
 timedFold f x = Prim . TimedFold f x
+
+
+
+-- ** JSString constructor and destructor
+
+toJSString :: Bhv String -> Bhv JSString
+toJSString = primOp1 "to_js_string"
+
+fromJSString :: Bhv JSString -> Bhv String
+fromJSString = primOp1 "from_js_string"
+
+instance BhvValue JSString where
+    bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (J.fromJSString str)++"')"
+
+
+
+-- ** Misc primitives
+
+bhvWrap :: BhvFun a (Bhv a)
+bhvWrap = primOp "bhv_wrap"
+
+bhvUnwrap :: BhvFun (Bhv a) a
+bhvUnwrap = primOp "bhv_unwrap"
+
+bhvToHask :: BhvFun a b -> (Bhv a -> Bhv b)
+bhvToHask = (.)
+
+haskToBhv :: (Bhv a -> Bhv b) -> BhvFun a b
+haskToBhv f = bhvUnwrap . apply . (cb f &&& bhvWrap)
 
 
 

@@ -183,13 +183,6 @@ instance BJSON Int where
     readJSON x = R.ite (typeof x R.== "number") (result_ok $ unsafeCoerce x) (result_error "readJSON: not a number")
     writeJSON = unsafeCoerce
 
-
-toJSString :: Bhv String -> Bhv JSString
-toJSString = b_toJSString
-
-fromJSString :: Bhv JSString -> Bhv String
-fromJSString = b_fromJSString
-
 instance R.BEq JSString where
         (==) = binOp "eq"
 

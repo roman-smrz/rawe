@@ -30,7 +30,8 @@ import Prelude (Bool(..), Char, String, Maybe(..), Int, Integer, Float, Double, 
 import Control.Category
 import Control.Category.Cartesian
 
-import Text.JSON
+import Text.JSON hiding (toJSString, fromJSString)
+import qualified Text.JSON as J
 
 import FRP.Rawe
 import FRP.Rawe.Internal
@@ -253,7 +254,7 @@ error' :: Bhv JSString -> Bhv a
 error' = primOp1 "error"
 
 error :: Bhv String -> Bhv a
-error = error' . b_toJSString
+error = error' . toJSString
 
 undefined = error "undefined"
 

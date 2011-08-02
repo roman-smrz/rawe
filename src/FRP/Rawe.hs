@@ -17,13 +17,14 @@ module FRP.Rawe (
 
     -- * Utility functions
 
-    cb, bfix, haskToBhv,
+    bhvWrap, bhvUnwrap, haskToBhv, bhvToHask,
+    cb, bfix,
     render,
 
     -- * To be (re)moved
     container, tag, jquery,
     span, reactive, reactive_prim, initReactive,
-    b_curry, b_uncurry, b_toJSString, b_fromJSString,
+    b_curry, b_uncurry,
     BhvServer(..),
 ) where
 
@@ -60,28 +61,12 @@ instance (BhvValue a) => BhvValue (Timed a) where
         bhvValue NotYet = return.RawJS $ "{NotYet:null}"
         -}
 
-instance BhvValue JSString where
-        bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (fromJSString str)++"')"
-
 
 type BehaviourFun = BhvFun
 type Behaviour a = Bhv a
 
 
 
-
-
-bhvPack :: BhvFun a (Bhv a)
-bhvPack = primFunc "bhv_pack"
-
-bhvUnpack :: BhvFun (Bhv a) a
-bhvUnpack = primFunc "bhv_unpack"
-
-
-
-
-haskToBhv :: (Bhv a -> Bhv b) -> BhvFun a b
-haskToBhv f = bhvUnpack . apply . (cb f &&& bhvPack)
 
 
 
@@ -197,17 +182,6 @@ b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
 -}
 
 
-
-
-
-
-b_toJSString :: Behaviour String -> Behaviour JSString
-b_toJSString = unOp "to_js_string"
-
-b_fromJSString :: Behaviour JSString -> Behaviour String
-b_fromJSString = unOp "from_js_string"
-
-
 bcurry :: BehaviourFun (a, b) c -> BehaviourFun d a -> BehaviourFun d b -> BehaviourFun d c
 bcurry f x y = f . (x &&& y)
 
@@ -259,9 +233,3 @@ bhv <-- html = undefined
 
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
 b_debug = binOp "debug"
-
-
-
-
-instance IsString (Behaviour String) where
-        fromString = cb
