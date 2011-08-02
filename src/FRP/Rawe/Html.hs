@@ -12,10 +12,15 @@ module FRP.Rawe.Html (
     JSString, JSObject, JSValue, Result(..),
     HtmlM, Html, Attribute(..), (!),
 
-    -- * Converting to HTML
+    -- * HTML manipulation
+
+    -- ** Converting to HTML
 
     ToHtmlBhv(..), BJSON(..),
 
+    -- ** Embedding behaviours
+
+    bhv,
 
     -- * Functions for HTML and JavaScript
 
@@ -62,12 +67,14 @@ module FRP.Rawe.Html (
 ) where
 
 
-import Prelude hiding (div, (.), fst, snd, id, until)
+import Prelude hiding (div, (.), fst, snd, id, span, until)
 
 import Control.Category
 import Control.Category.Cartesian
 
 import Control.Monad.State
+
+import Data.String
 
 import Text.JSON (JSString, JSObject, JSValue, Result(..))
 import qualified Text.JSON as J
@@ -78,6 +85,13 @@ import FRP.Rawe.Internal
 import qualified FRP.Rawe.Prelude as R
 
 
+--------------------------------------------------------------------------------
+-- HTML manipulation
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+--   Converting to HTML
 
 class ToHtmlBhv a where
     toHtml :: Bhv a -> Bhv Html
@@ -102,9 +116,64 @@ instance ToHtmlBhv a => ToHtmlBhv (Maybe a) where
     toHtml = R.maybe (cb $ div $ return ()) toHtml
 
 
+--------------------------------------------------------------------------------
+--  Embedding behaviours
+
+class BehaviourToHtml a where
+    bhv :: Bhv (HtmlM a) -> HtmlM a
+
+instance BehaviourToHtml () where
+    bhv x = do ~(_,id) <- addBehaviour x
+               cur <- gets hsHtmlCurrent
+               HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
+
+instance BehaviourToHtml (Bhv a) where
+    bhv x = do ~(r,id) <- addBehaviour x
+               cur <- gets hsHtmlCurrent
+               jbhv <- bhvValue (Assigned (r,id) :: Bhv (HtmlM (Bhv a)))
+               nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
+               HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
+
+
+instance BhvValue Html where
+    bhvValue html = do
+        (i, (raw, ())) <- withHtmlCurrent $ renderH html
+        modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
+        return.RawJS $ "cthunk(r_html_"++show i++")"
+
+instance BhvValue (HtmlM (Bhv a)) where
+    bhvValue html = do
+        (i, (raw, b)) <- withHtmlCurrent $ renderH html
+        (RawJS inner) <- bhvValue b
+        modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
+        return.RawJS $ "cthunk(r_html_"++show i++")"
+
+
+withHtmlCurrent :: HtmlM a -> HtmlM (Int, a)
+withHtmlCurrent act = do
+    i <- htmlUniq
+    orig <- get
+    put $ orig { hsHtmlCurrent = Just i }
+    res <- act
+    modify $ \s -> s { hsHtmlCurrent = hsHtmlCurrent orig }
+    return (i, res)
+
+
+
+instance IsString (Bhv Html) where
+    fromString = cb . span . fromString
+
+
 instance R.BFunctor Timed where
     fmap f = timed notYet (\t x -> onTime t (f x))
 
+
+--------------------------------------------------------------------------------
+-- Functions and data types for HTML and JavaScript
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+--  JavaScript values
 
 class BJSON a where
     readJSON :: Bhv JSValue -> Bhv (Result a)

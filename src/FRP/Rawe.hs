@@ -25,7 +25,6 @@ module FRP.Rawe (
     container, addAttr, tag, jquery,
     span, reactive, reactive_prim, initReactive,
     b_curry, b_uncurry, b_toJSString, b_fromJSString,
-    bhv,
     BhvServer(..),
 ) where
 
@@ -51,36 +50,6 @@ import FRP.Rawe.Internal
 
 import Debug.Trace
 
-
-
-instance BhvValue Html where
-    bhvValue html = do
-        (i, (raw, ())) <- withHtmlCurrent $ renderH html
-        modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
-        return.RawJS $ "cthunk(r_html_"++show i++")"
-
-instance BhvValue (HtmlM (Behaviour a)) where
-    bhvValue html = do
-        (i, (raw, b)) <- withHtmlCurrent $ renderH html
-        (RawJS inner) <- bhvValue b
-        modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
-        return.RawJS $ "cthunk(r_html_"++show i++")"
-
-
-withHtmlCurrent :: HtmlM a -> HtmlM (Int, a)
-withHtmlCurrent act = do
-    i <- htmlUniq
-    orig <- get
-    put $ orig { hsHtmlCurrent = Just i }
-    res <- act
-    modify $ \s -> s { hsHtmlCurrent = hsHtmlCurrent orig }
-    return (i, res)
-
-
-jsHtml :: HtmlM a -> HtmlM (RawJS, a)
-jsHtml html = do
-        (raw, x) <- renderH html
-        return (RawJS $ "$('"++escapeStringJS raw++"')", x)
 
 
 {-
@@ -348,24 +317,6 @@ instance Num (BehaviourFun a (Maybe Int)) where
 
 
 
-class BehaviourToHtml a where
-        bhv :: Behaviour (HtmlM a) -> HtmlM a
-
-instance BehaviourToHtml () where
-    bhv x = do ~(_,id) <- addBehaviour x
-               cur <- gets hsHtmlCurrent
-               HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
-
-instance BehaviourToHtml (Behaviour a) where
-    bhv x = do ~(r,id) <- addBehaviour x
-               cur <- gets hsHtmlCurrent
-               jbhv <- bhvValue (Assigned (r,id) :: Behaviour (HtmlM (Behaviour a)))
-               nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
-               HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
-
-
-
-
 
 newBhv :: HtmlM (Behaviour a)
 newBhv = undefined
@@ -379,8 +330,6 @@ b_debug = binOp "debug"
 
 
 
-instance IsString (Behaviour Html) where
-        fromString = cb . span . fromString
 
 instance IsString (Behaviour String) where
         fromString = cb
