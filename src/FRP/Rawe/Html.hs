@@ -44,19 +44,29 @@ module FRP.Rawe.Html (
     sget', sget,
     post', post,
 
+    -- ** Special values
+
+    jquery, reactive, reactivePrim,
+    initReactive,
+
     -- ** HTML elements
 
-    head_, body,
-    a, br, div, html, li, title, ul,
-
-    form', form,
-    textfield', textfield,
-    submit', submit,
-    button,
+    a,
+    body, br, button,
+    div,
+    form, form',
+    head_, html,
+    li,
+    textfield', textfield, title,
+    script, span, submit, submit',
+    ul,
 
     -- ** HTML attribuets
 
-    name, style, value,
+    name,
+    src, style,
+    type_,
+    value,
 
     -- ** Other functions
 
@@ -232,6 +242,12 @@ typeof = fromJSString . typeof'
 
 
 
+--------------------------------------------------------------------------------
+-- Page construction
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+--  Talking to server
 
 sget' :: String -> Bhv (Maybe JSValue)
 sget' = Prim . BhvServer "sget" . J.toJSString
@@ -251,27 +267,66 @@ post name = fmap (R.join . R.fmap (result R.just (const R.nothing) . readJSON)) 
 
 
 
+--------------------------------------------------------------------------------
+--  Special values
+
+jquery :: Html
+jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
+
+reactive :: Html
+reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
+
+reactivePrim :: Html
+reactivePrim = script ! type_ "text/javascript" ! src "js/reactive-prim.js" $ ""
+
+initReactive :: Html
+initReactive = do
+    bs <- gets $ reverse . hsBehaviours
+    hs <- gets $ reverse . hsHtmlValues
+    hbs <- gets $ reverse . hsHtmlBehaviours
+    hgs <- gets $ reverse . hsHtmlGens
+    script ! type_ "text/javascript" $ do
+        str $ "$(document).ready(function() {\n"
+
+        forM_ bs $ \(i, func, params) ->
+            str $ "r_bhv_fun_0["++show i++"] = new BhvFun("++show i++");\n"
+
+        forM_ hs $ \(i, h, mi) ->
+            str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
+            case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
+            ++ ";\n"
+
+        forM_ hbs $ \(i, mv) ->
+            let var = case mv of Nothing -> "$('body')"
+                                 Just v  -> "r_html_"++show v
+             in str $ "r_bhv_fun_0["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
+
+        forM_ hgs $ \(i, mv) ->
+            let var = case mv of Nothing -> "$('body')"
+                                 Just v  -> "r_html_"++show v
+             in str $ "r_bhv_fun_0["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
+
+        forM_ bs $ \(i, func, params) -> do
+            let jid = show i
+                jfunc = "r_prim_"++func
+                jparams = concatMap ((',':).unRawJS) params
+            str $ jfunc++".call(r_bhv_fun_0["++jid++"]"++jparams++");\n"
+
+        str $ "r_init();\n"
+        str $ "});\n";
 
 
 
-head_ content = container "head" $ do
-        jquery
-        reactive
-        reactive_prim
-        content
-
-body content = container "body" $ do
-        content
-        initReactive
+--------------------------------------------------------------------------------
+--  Html elements
 
 
-a = container "a"
-br = tag "br"
-div = container "div"
-html = container "html"
-li = container "li"
-title = container "title"
-ul = container "ul"
+container :: String -> Html -> Html
+container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
+                                         in ((), ([Tag tag [] content], s'))
+
+tag :: String -> Html
+tag name = HtmlM $ \s -> ((), ([Tag name [] []], s))
 
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Bhv a)
@@ -285,11 +340,43 @@ htmlGen name tag (HtmlM f) = do
 input :: String -> HtmlM (Bhv a)
 input t = htmlGen ("input_"++t) (Tag "input" [AttrVal "type" t]) (return ())
 
-form' :: HtmlM a -> HtmlM (Bhv (Timed (JSObject JSString)))
-form' = htmlGen "form" (Tag "form" [])
+
+
+a :: Html -> Html
+a = container "a"
+
+body :: Html -> Html
+body content = container "body" $ do
+    content
+    initReactive
+
+br :: Html
+br = tag "br"
+
+button :: HtmlM (Bhv (Timed ()))
+button = input "button"
+
+div :: Html -> Html
+div = container "div"
 
 form :: HtmlM a -> HtmlM (Bhv (Timed [(String, String)]))
 form = fmap (R.fmap (fromJSObject . R.fmap fromJSString)) . form'
+
+form' :: HtmlM a -> HtmlM (Bhv (Timed (JSObject JSString)))
+form' = htmlGen "form" (Tag "form" [])
+
+head_ :: Html -> Html
+head_ content = container "head" $ do
+    jquery
+    reactive
+    reactivePrim
+    content
+
+html :: Html -> Html
+html = container "html"
+
+li :: Html -> Html
+li = container "li"
 
 textfield' :: String -> HtmlM (Bhv JSString)
 textfield' n = input "text" ! name n
@@ -297,19 +384,33 @@ textfield' n = input "text" ! name n
 textfield :: String -> HtmlM (Bhv String)
 textfield = fmap fromJSString . textfield'
 
-submit' :: HtmlM (Bhv (Timed JSString))
-submit' = input "submit"
+title :: Html -> Html
+title = container "title"
+
+script :: Html -> Html
+script = container "script"
+
+span :: Html -> Html
+span = container "span"
 
 submit :: HtmlM (Bhv (Timed String))
 submit = fmap (R.fmap fromJSString) $ submit'
 
-button :: HtmlM (Bhv (Timed ()))
-button = input "button"
+submit' :: HtmlM (Bhv (Timed JSString))
+submit' = input "submit"
 
+ul :: Html -> Html
+ul = container "ul"
+
+
+--------------------------------------------------------------------------------
+--  Html attributes
 
 
 name = AttrVal "name"
+src = AttrVal "src"
 style = AttrVal "style"
+type_ = AttrVal "type"
 value = AttrVal "value"
 
 

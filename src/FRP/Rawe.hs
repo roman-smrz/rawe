@@ -22,14 +22,12 @@ module FRP.Rawe (
     render,
 
     -- * To be (re)moved
-    container, tag, jquery,
-    span, reactive, reactive_prim, initReactive,
     b_curry, b_uncurry,
     BhvServer(..),
 ) where
 
 
-import Prelude hiding (head,div,(.),id,fst,snd,span,curry,uncurry)
+import Prelude hiding (head,div,(.),id,fst,snd,curry,uncurry)
 
 import Control.Categorical.Bifunctor
 import Control.Category
@@ -79,73 +77,6 @@ instance BhvPrim (BhvServer a b) a b where
                 jname <- bhvValue name
                 return (func, [jname])
 
-
-
-
-
-
-
-
-
-
-
-
-
-jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
-reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
-reactive_prim = script ! type_ "text/javascript" ! src "js/reactive-prim.js" $ ""
-
-initReactive :: Html
-initReactive = do
-        bs <- gets $ reverse . hsBehaviours
-        hs <- gets $ reverse . hsHtmlValues
-        hbs <- gets $ reverse . hsHtmlBehaviours
-        hgs <- gets $ reverse . hsHtmlGens
-        script ! type_ "text/javascript" $ do
-                str $ "$(document).ready(function() {\n"
-
-                forM_ bs $ \(i, func, params) ->
-                        str $ "r_bhv_fun_0["++show i++"] = new BhvFun("++show i++");\n"
-
-                forM_ hs $ \(i, h, mi) ->
-                    str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
-                    case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
-                    ++ ";\n"
-
-                forM_ hbs $ \(i, mv) ->
-                    let var = case mv of Nothing -> "$('body')"
-                                         Just v  -> "r_html_"++show v
-                     in str $ "r_bhv_fun_0["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
-
-                forM_ hgs $ \(i, mv) ->
-                    let var = case mv of Nothing -> "$('body')"
-                                         Just v  -> "r_html_"++show v
-                     in str $ "r_bhv_fun_0["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
-
-                forM_ bs $ \(i, func, params) -> do
-                        let jid = show i
-                            jfunc = "r_prim_"++func
-                            jparams = concatMap ((',':).unRawJS) params
-                        str $ jfunc++".call(r_bhv_fun_0["++jid++"]"++jparams++");\n"
-
-                str $ "r_init();\n"
-                str $ "});\n";
-
-
-
-
-container :: String -> Html -> Html
-container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
-                                         in ((), ([Tag tag [] content], s'))
-
-tag :: String -> Html
-tag name = HtmlM $ \s -> ((), ([Tag name [] []], s))
-
-script = container "script"
-span = container "span"
-
-type_ = AttrVal "type"
-src = AttrVal "src"
 
 
 
