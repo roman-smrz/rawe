@@ -33,6 +33,8 @@ import Control.Category.Cartesian
 import Text.JSON
 
 import FRP.Rawe
+import FRP.Rawe.Internal
+
 
 
 instance BEq Int where (==) = primOp2 "eq"

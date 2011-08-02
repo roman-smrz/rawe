@@ -8,10 +8,28 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 
-module FRP.Rawe where
+module FRP.Rawe (
+    -- * Core types
+    Bhv, BhvFun,
+
+    Time, Timed(..),
+    timed, notYet, onTime,
+    timedFold,
+
+    -- * Utility functions
+
+    cb, bfix, haskToBhv,
+
+    -- * To be (re)moved
+    container, addAttr, tag, jquery,
+    span, reactive, reactive_prim, initReactive,
+    b_curry, b_uncurry, b_toJSString, b_fromJSString,
+    bhv, render,
+    BhvServer(..),
+) where
 
 
-import Prelude hiding (head,div,(.),id,fst,snd,span)
+import Prelude hiding (head,div,(.),id,fst,snd,span,curry,uncurry)
 
 import Control.Categorical.Bifunctor
 import Control.Category
@@ -33,22 +51,6 @@ import FRP.Rawe.Internal
 
 import Debug.Trace
 
-
-
-class BhvValue a where
-        bhvValue :: a -> HtmlM RawJS
-
-instance BhvValue () where bhvValue () = return "cthunk([])"
-instance BhvValue Int where bhvValue x = return.RawJS $ "cthunk("++show x++")"
-instance BhvValue Bool where bhvValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
-
-instance BhvValue Attribute where
-        bhvValue (AttrVal name value) = do
-                (RawJS jn) <- bhvValue name; (RawJS jv) <- bhvValue value
-                return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
-        bhvValue (AttrBool name) = do
-                (RawJS jn) <- bhvValue name
-                return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
 
 
 instance BhvValue Html where
@@ -80,24 +82,6 @@ jsHtml html = do
         (raw, x) <- renderH html
         return (RawJS $ "$('"++escapeStringJS raw++"')", x)
 
-instance BhvValue Char where
-        bhvValue x = return.RawJS $ "cthunk("++show x++")"
-
-instance (BhvValue a, BhvValue b) => BhvValue (a, b) where
-        bhvValue (x,y) = do
-                (RawJS x') <- bhvValue x; (RawJS y') <- bhvValue y
-                return.RawJS $ "cthunk(["++x'++", "++y'++"])"
-
-instance (BhvValue a) => BhvValue (Maybe a) where
-        bhvValue (Just x) = do (RawJS jx) <- bhvValue x
-                               return.RawJS $ "cthunk({Just:"++jx++"})"
-        bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
-
-instance BhvValue a => BhvValue [a] where
-        bhvValue [] = return.RawJS $ "cthunk({nil:[]})"
-        bhvValue (x:xs) = do RawJS jx <- bhvValue x
-                             RawJS jxs <- bhvValue xs
-                             return.RawJS $ "cthunk({cons:["++jx++","++jxs++"]})"
 
 {-
 instance (BhvValue a) => BhvValue (Timed a) where
@@ -112,11 +96,6 @@ instance BhvValue JSString where
         bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (fromJSString str)++"')"
 
 
-escapeStringJS = (>>=helper)
-        where helper '\n' = "\\n"
-              helper c | c `elem` "'\"\\" = '\\':c:[]
-                       | otherwise        = [c]
-
 escapeStringHtml = (>>=helper)
         where helper '"' = "&quot;"
               helper '&' = "&amp;"
@@ -125,66 +104,11 @@ escapeStringHtml = (>>=helper)
               helper c = [c]
 
 
-data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
-                | Assigned (Int, Int)
-                | (a ~ b) => BhvID
-
-type Bhv a = BehaviourFun Void a
-
 type BehaviourFun = BhvFun
 type Behaviour a = Bhv a
 
 
 
-
-
-instance Category BehaviourFun where
-        id = BhvID
-        BhvID . b = b
-        b . BhvID = b
-        x@(Prim _) . y@(Prim _) = Prim $ BhvModifier2 "compose" y x
-        x@(Prim _) . y@(Assigned _) = Prim $ BhvModifier2 "compose" y x
-        x@(Assigned _) . y@(Prim _) = Prim $ BhvModifier2 "compose" y x
-        x@(Assigned _) . y@(Assigned _) = Prim $ BhvModifier2 "compose" y x
-
-
-instance PFunctor (,) BhvFun BhvFun where
-    first = firstDefault
-
-instance QFunctor (,) BhvFun BhvFun where
-    second = secondDefault
-
-instance Bifunctor (,) BhvFun BhvFun BhvFun where
-    bimap = bimapProduct
-
-instance Braided BhvFun (,) where
-    braid = braidProduct
-
-instance Symmetric BhvFun (,)
-
-instance Associative BhvFun (,) where
-    associate = associateProduct
-
-instance Disassociative BhvFun (,) where
-    disassociate = disassociateProduct
-
-type instance Id BhvFun (,) = Void
-
-instance Monoidal BhvFun (,) where
-    idl = snd
-    idr = fst
-
-instance PreCartesian BhvFun where
-    type Product BhvFun = (,)
-    x &&& y = Prim $ BhvModifier2 "product" x y
-    fst = primOp "fst"
-    snd = primOp "snd"
-
-instance CCC BhvFun where
-    type Exp BhvFun = (->)
-    apply = primFunc "apply"
-    curry = Prim . BhvModifier "curry"
-    uncurry = Prim . BhvModifier "uncurry"
 
 
 bhvPack :: BhvFun a (Bhv a)
@@ -194,121 +118,11 @@ bhvUnpack :: BhvFun (Bhv a) a
 bhvUnpack = primFunc "bhv_unpack"
 
 
-instance (BhvValue b) => BhvValue (Bhv a -> b) where
-    bhvValue = bhvValueCommon bhvValue $ \r iid ->
-        [ "var r_bhv_fun_"++show r++" = {};"
-        , "r_bhv_fun_"++show r++"["++show iid++"] = param.get();"
-        ]
-        {-
-        code <- htmlLocal $ do
-            iid <- htmlUniq
-            r <- gets hsRecursion
-            RawJS result <- bhvValue $ f (Assigned (r,iid))
-
-            bs <- gets $ reverse.hsBehaviours
-            hs <- gets $ reverse.hsHtmlValues
-            hbs <- gets $ reverse.hsHtmlBehaviours
-            return $
-                "\tvar r_bhv_fun_"++show r++" = {};\n" ++
-                "\tr_bhv_fun_"++show r++"["++show iid++"] = param.get();\n" ++
-                (concat $ concat $
-                [ flip map bs $ \((r',id'), func, params) ->
-                    "\tr_bhv_fun_"++show r'++"["++show id'++"] = new BhvFun("++show id'++");\n"
-                , flip map hs $ \(i, h) ->
-                    "var r_html_"++show i++" = $('"++escapeStringJS h++"');\n"
-                , flip map hbs $ \(i, mv) ->
-                    let var = case mv of Nothing -> "$('body')"
-                                         Just v  -> "r_html_"++show v
-                     in "r_bhv_fun_"++show r++"["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
-                , flip map bs $ \((r',id'), func, params) ->
-                    let jid = show id'
-                        jfunc = "r_prim_"++func
-                        jparams = concatMap ((',':).unRawJS) params
-                     in "\t"++jfunc++".call(r_bhv_fun_"++show r'++"["++jid++"]"++jparams++");\n"
-                ]) ++ "\treturn "++result++";\n"
-
-        return $ RawJS $ "cthunk(function(param) {\n" ++ code ++ "})"
-        -}
-
-
-class BhvValueFun a b | a -> b where
-    bhvValueFun :: a -> HtmlM RawJS
-    cbf :: a -> Bhv b
-
-instance BhvValueFun (Bhv a) a where
-    bhvValueFun x = do RawJS jx <- bhvValue x
-                       return $ RawJS (jx ++ ".get().compute(cthunk(null))")
-    cbf = id
-
-instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
-    bhvValueFun = bhvValueCommon bhvValueFun $ \r iid ->
-        [ "var r_bhv_fun_"++show r++" = {};"
-        , "r_bhv_fun_"++show r++"["++show iid++"] = new BhvFun();"
-        , "r_prim_const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
-        ]
-    cbf = Prim . BhvConstFun
-
-bhvValueCommon bv begin f = htmlLocal $ do
-    iid <- htmlUniq
-    r <- gets hsRecursion
-    RawJS result <- bv $ f (Assigned (r,iid))
-
-    bs <- gets $ reverse.hsBehaviours
-    hs <- gets $ reverse.hsHtmlValues
-    hbs <- gets $ reverse.hsHtmlBehaviours
-    hgs <- gets $ reverse.hsHtmlGens
-
-    return $ RawJS $ init $ unlines $
-        ("cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
-        map (replicate r '\t' ++) $ (begin r iid ++) $
-        concat
-        [ flip map bs $ \(id, func, params) ->
-            "r_bhv_fun_"++show r++"["++show id++"] = new BhvFun("++show id++");"
-
-        , flip map hs $ \(i, h, mi) ->
-            "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
-            case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
-            ++ ";"
-
-        , flip map hbs $ \(i, mv) ->
-            let var = case mv of Nothing -> "$('body')"
-                                 Just v  -> "r_html_"++show v
-             in "r_bhv_fun_"++show r++"["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');"
-
-        , flip map hgs $ \(i, mv) ->
-            let var = case mv of Nothing -> "$('body')"
-                                 Just v  -> "r_html_"++show v
-             in "r_bhv_fun_"++show r++"["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');"
-
-        , flip map bs $ \(id, func, params) ->
-            let jid = show id
-                jfunc = "r_prim_"++func
-                jparams = concatMap ((',':).unRawJS) params
-             in jfunc++".call(r_bhv_fun_"++show r++"["++jid++"]"++jparams++");"
-
-        , flip map hbs $ \(i, _) ->
-            "r_bhv_fun_"++show r++"["++show i++"].invalidate();"
-        ]
-        ++
-        [ "return "++result++";" ]
-
-
-data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
-instance BhvPrim (BhvConstFun a b b') a b' where
-        bhvPrim (BhvConstFun x) = do jx <- bhvValueFun x
-                                     return ("const", [jx])
-
---cbf :: (BhvValueFun a a') => a -> BhvFun b a'
---cbf = Prim . BhvConstFun
 
 
 haskToBhv :: (Bhv a -> Bhv b) -> BhvFun a b
 haskToBhv f = bhvUnpack . apply . (cb f &&& bhvPack)
 
-
-
-class BhvPrim f a b | f -> a b where
-        bhvPrim :: f -> HtmlM (String, [RawJS])
 
 
 
@@ -343,41 +157,6 @@ eitherToResult (Left e) = Error e
 -}
 
 
-
-
-addBehaviour' :: Int -> String -> [RawJS] -> HtmlM ()
-addBehaviour' id name params =
-        modify $ \s -> s { hsBehaviours = (id, name, params) : hsBehaviours s }
-
-
-addBehaviourName :: String -> [RawJS] -> HtmlM (Int, Int)
-addBehaviourName name params = do
-    bid <- htmlUniq
-    r <- gets hsRecursion
-    addBehaviour' bid name params
-    return (r,bid)
-
-
-addBehaviour :: BehaviourFun a b -> HtmlM (Int,Int)
-addBehaviour b = do
-        -- We need to do this so b does not need to be evaluated for internal
-        -- unique counter and mfix may work for mutually recursive behaviours.
-        nid <- htmlUniq
-        r <- gets hsRecursion
-
-        case b of
-             Prim f -> do
-                     (name, params) <- bhvPrim f
-                     addBehaviour' nid name params
-                     return (r,nid)
-
-             Assigned id -> return id
-             BhvID -> return (0,0)
-
-
-instance BhvValue (BhvFun a b) where
-    bhvValue f = do (r,i) <- addBehaviour f
-                    return $ RawJS $ "cthunk(r_bhv_fun_"++show r++"["++show i++"])"
 
 
 
@@ -536,52 +315,8 @@ b_fromJSString :: Behaviour JSString -> Behaviour String
 b_fromJSString = unOp "from_js_string"
 
 
-data BhvEnumFromTo = BhvEnumFromTo
-instance BhvPrim BhvEnumFromTo (Int,Int) [Int] where
-        bhvPrim BhvEnumFromTo = return ("enum_from_to", [])
-benumFromTo :: BehaviourFun (Int,Int) [Int]
-benumFromTo = Prim BhvEnumFromTo
-
-data BhvConst a b = (BhvValue b) => BhvConst b
-instance BhvPrim (BhvConst a b) a b where
-        bhvPrim (BhvConst x) = do jx <- bhvValue x
-                                  return ("const", [jx])
-
-
-data BhvPrimFunc a b = BhvPrimFunc String
-instance BhvPrim (BhvPrimFunc a b) a b where
-        bhvPrim (BhvPrimFunc name) = return (name, [])
-
-data BhvModifier a b c d = BhvModifier String (BehaviourFun a b)
-instance BhvPrim (BhvModifier a b c d) c d where
-        bhvPrim (BhvModifier name x) = do jx <- bhvValue x
-                                          return (name, [jx])
-
-data BhvModifier2 a b c d e f = BhvModifier2 String (BehaviourFun a b) (BehaviourFun c d)
-instance BhvPrim (BhvModifier2 a b c d e f) e f where
-        bhvPrim (BhvModifier2 name x y) = do jx <- bhvValue x; jy <- bhvValue y
-                                             return (name, [jx, jy])
-
-
 bcurry :: BehaviourFun (a, b) c -> BehaviourFun d a -> BehaviourFun d b -> BehaviourFun d c
 bcurry f x y = f . (x &&& y)
-
-primFunc :: String -> BehaviourFun a b
-primFunc name = Prim (BhvPrimFunc name)
-unOp :: String -> BehaviourFun a b -> BehaviourFun a c
-
-unOp  name x     = primFunc name .  x
-binOp name x y   = primFunc name . (x &&& y)
-terOp name x y z = primFunc name . (x &&& y &&& z)
-
-primOp :: String -> BhvFun a b
-primOp = Prim . BhvPrimFunc
-
-primOp1 name a         = primOp name . (cbf a)
-primOp2 name a b       = primOp name . (cbf a &&& cbf b)
-primOp3 name a b c     = primOp name . (cbf a &&& cbf b &&& cbf c)
-primOp4 name a b c d   = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d)
-primOp5 name a b c d e = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d &&& cbf e)
 
 bjoin :: Behaviour (BehaviourFun a b) -> BehaviourFun a b
 bjoin = Prim . BhvModifier "bjoin"
@@ -637,9 +372,6 @@ instance BehaviourToHtml (Behaviour a) where
                HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 
-
-cb :: (BhvValue a) => a -> BehaviourFun b a
-cb x = Prim $ BhvConst x
 
 
 
@@ -710,17 +442,3 @@ renderH (HtmlM f) = do
                       tell =<< gets rsJavascript
                       tell "</script>\n"
                       modify $ \s -> s { rsJavascript = [] }
-
-
-
-htmlUniq :: HtmlM Int
-htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
-
-
-htmlLocal :: HtmlM a -> HtmlM a
-htmlLocal action = do
-    state <- get
-    put $ emptyHtmlState { hsRecursion = hsRecursion state + 1 }
-    result <- action
-    put state
-    return result
