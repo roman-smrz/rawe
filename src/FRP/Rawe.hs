@@ -4,7 +4,6 @@
   TypeSynonymInstances, NoMonomorphismRestriction #-}
 
 {-# LANGUAGE DoRec #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 
@@ -94,29 +93,6 @@ instance BhvPrim (BhvServer a b) a b where
         bhvPrim (BhvServer func name) = do
                 jname <- bhvValue name
                 return (func, [jname])
-
-
-data Time
-
-data Timed a = NotYet | OnTime Time a
-
-{-
-instance JSON a => JSON (Timed a) where
-        readJSON (JSObject x) = case fromJSObject x of
-                                     [("NotYet", _)] -> Ok NotYet
-                                     [("Data", params)] -> eitherToResult $ do
-                                             [jt, jx] <- resultToEither $ readJSON params
-                                             t <- resultToEither $ readJSON jt
-                                             x <- resultToEither $ readJSON jx
-                                             return $ OnTime t x
-
-        showJSON NotYet       = JSObject $ toJSObject [("NotYet", JSNull)]
-        showJSON (OnTime t x) = JSObject $ toJSObject [("OnTime", showJSON [showJSON t, showJSON x])]
-
-eitherToResult (Right x) = Ok x
-eitherToResult (Left e) = Error e
--}
-
 
 
 
@@ -243,28 +219,6 @@ b_liftM2 f mx my = mx ~>>= \x -> my ~>>= \y -> b_return (f x y)
 -}
 
 
-
-{- Timed constructors, destructor and instances -}
-
-notYet :: Behaviour (Timed a)
-notYet = primFunc "not_yet"
-
-onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
-onTime = binOp "on_time"
-
-timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
-timed def f = terOp "timed" def (cb $ haskToBhv $ b_uncurry f)
-
-data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
-instance BhvPrim (TimedFold a b) Void a where
-    bhvPrim (TimedFold step def ev) = do
-        jstep <- bhvValue $ haskToBhv $ b_uncurryAll step
-        jdef <- bhvValue def
-        jev <- bhvValue ev
-        return ("timed_fold", [jstep, jdef, jev])
-
-timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
-timedFold f x = Prim . TimedFold f x
 
 
 

@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE EmptyDataDecls #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -455,6 +456,36 @@ escapeStringHtml = (>>=helper)
 
 
 -- * Other definitions
+
+
+-- ** Timed type, constructors, destructor and instances
+
+data Time
+
+data Timed a = NotYet | OnTime Time a
+
+
+notYet :: Bhv (Timed a)
+notYet = primOp "not_yet"
+
+onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
+onTime = primOp2 "on_time"
+
+timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
+timed = primOp3 "timed"
+
+data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
+instance BhvPrim (TimedFold a b) Void a where
+    bhvPrim (TimedFold step def ev) = do
+        jstep <- bhvValue $ cbf step
+        jdef <- bhvValue def
+        jev <- bhvValue ev
+        return ("timed_fold", [jstep, jdef, jev])
+
+timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
+timedFold f x = Prim . TimedFold f x
+
+
 
 newtype RawJS = RawJS { unRawJS :: String }
 instance IsString RawJS where fromString = RawJS

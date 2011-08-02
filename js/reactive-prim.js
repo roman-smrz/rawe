@@ -537,15 +537,17 @@ function r_prim_on_time() {
 }
 
 function r_prim_timed() {
-	this.compute_unbox = function(params, env) {
+	this.compute = function(params) { return new Thunk(function() {
                 var not_yet = params.get()[0];
                 var on_time = params.get()[1].get()[0];
                 var value = params.get()[1].get()[1];
 
 		if (typeof value.get().OnTime == 'undefined')
-			return not_yet;
-		return on_time.get().compute(cthunk( value.get().OnTime ), env);
-	};
+			return not_yet.get();
+
+		var ot = value.get().OnTime;
+		return on_time.get()(ot[0]).get()(ot[1]).get();
+	}); };
 }
 
 function r_prim_timed_map() {
@@ -568,12 +570,12 @@ function r_prim_timed_fold(step, def, ev) {
 	ev = ev.get();
 	this.add_depend(ev);
 
-	this.compute = function(_, env) { return new Thunk(function() {
+	this.compute = function() { return new Thunk(function() {
 		if (!b.valid) {
-			var timed = ev.compute(cthunk([]), env).get();
+			var timed = ev.compute().get();
 
 			if (timed.OnTime && timed.OnTime[0].get() > last_recomp) {
-				value = step.compute(cthunk( [ timed.OnTime[0], cthunk( [ value, timed.OnTime[1] ] ) ] ), env);
+				value = step.compute().get()(timed.OnTime[0]).get()(value).get()(timed.OnTime[1]);
 				last_recomp = timed.OnTime[0].get();
 			}
 
