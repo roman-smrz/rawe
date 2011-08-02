@@ -19,12 +19,13 @@ module FRP.Rawe (
     -- * Utility functions
 
     cb, bfix, haskToBhv,
+    render,
 
     -- * To be (re)moved
     container, addAttr, tag, jquery,
     span, reactive, reactive_prim, initReactive,
     b_curry, b_uncurry, b_toJSString, b_fromJSString,
-    bhv, render,
+    bhv,
     BhvServer(..),
 ) where
 
@@ -40,7 +41,6 @@ import Control.Category.Cartesian.Closed
 import Control.Category.Monoidal
 
 import Control.Monad.State
-import Control.Monad.Writer hiding (Product)
 
 import Data.String
 import Data.Void
@@ -94,14 +94,6 @@ instance (BhvValue a) => BhvValue (Timed a) where
 
 instance BhvValue JSString where
         bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (fromJSString str)++"')"
-
-
-escapeStringHtml = (>>=helper)
-        where helper '"' = "&quot;"
-              helper '&' = "&amp;"
-              helper '<' = "&lt;"
-              helper '>' = "&gt;"
-              helper c = [c]
 
 
 type BehaviourFun = BhvFun
@@ -392,53 +384,3 @@ instance IsString (Behaviour Html) where
 
 instance IsString (Behaviour String) where
         fromString = cb
-
-
-
-
-data RenderState = RenderState { rsUniq :: Int, rsJavascript :: String }
-type RenderMonad a = Writer String a
-
-
-render :: Html -> String
-render html = let (HtmlM f) = renderH html
-                  ((result, ()), _) = f (emptyHtmlState { hsUniq = 1, hsBehaviours = [(0, "id", [])] } )
-               in result
---render (HtmlM xs) = snd $ runWriter $ evalStateT (mapM render' $ fst $ snd $ xs $ HtmlState 1 []) (RenderState 1 "")
-
-
-renderH :: HtmlM a -> HtmlM (String, a)
-renderH (HtmlM f) = do
-        (x, (xs, s')) <- gets f
-        put s'
-        return (execWriter (mapM_ render' xs), x)
-
-        where render' :: HtmlStructure -> RenderMonad ()
-
-              render' (Tag tag attrs xs) = do
-                      tell $ "<" ++ tag
-                      mapM_ renderAttrs attrs
-                      tell ">\n"
-                      mapM render' xs
-                      tell $ "</" ++ tag ++ ">\n"
-
-              render' (Text text) = tell text
-
-              render' (Behaviour id) = do
-                      tell $ "<div bhv-id="++show id++"></div>\n"
-
-{-
-              render' (Placeholder p attrs) = do
-                      tell $ "<div placeholder-id=\""++show p++"\""
-                      mapM_ renderAttrs attrs
-                      tell "></div>\n"
-                      -}
-
-              renderAttrs (AttrBool name) = tell $ ' ':name
-              renderAttrs (AttrVal name val) = tell $ " "++name++"=\""++escapeStringHtml val++"\""
-
-              renderJavascript = do
-                      tell "<script type=\"text/javascript\">\n"
-                      tell =<< gets rsJavascript
-                      tell "</script>\n"
-                      modify $ \s -> s { rsJavascript = [] }
