@@ -80,26 +80,26 @@ import qualified FRP.Rawe.Prelude as R
 
 
 class ToHtmlBhv a where
-        toHtml :: Bhv a -> Bhv Html
+    toHtml :: Bhv a -> Bhv Html
 
 instance ToHtmlBhv Html where
-        toHtml = id
+    toHtml = id
 
 instance ToHtmlBhv Int where
-        toHtml = unOp "to_html_int"
+    toHtml = unOp "to_html_int"
 
 instance ToHtmlBhv String where
-        toHtml = toHtml . toJSString
+    toHtml = toHtml . toJSString
 
 instance ToHtmlBhv JSString where
-        toHtml = unOp "to_html_jsstring"
+    toHtml = unOp "to_html_jsstring"
 
 
 instance ToHtmlBhv [Html] where
-        toHtml = R.foldl appendHtml (cb $ div $ return ())
+    toHtml = R.foldl appendHtml (cb $ div $ return ())
 
 instance ToHtmlBhv a => ToHtmlBhv (Maybe a) where
-        toHtml = R.maybe (cb $ div $ return ()) toHtml
+    toHtml = R.maybe (cb $ div $ return ()) toHtml
 
 
 instance R.BFunctor Timed where
@@ -107,12 +107,12 @@ instance R.BFunctor Timed where
 
 
 class BJSON a where
-        readJSON :: Bhv JSValue -> Bhv (Result a)
-        writeJSON :: Bhv a -> Bhv JSValue
+    readJSON :: Bhv JSValue -> Bhv (Result a)
+    writeJSON :: Bhv a -> Bhv JSValue
 
 instance BJSON Int where
-        readJSON x = R.ite (typeof x R.== "number") (result_ok $ unsafeCoerce x) (result_error "readJSON: not a number")
-        writeJSON = unsafeCoerce
+    readJSON x = R.ite (typeof x R.== "number") (result_ok $ unsafeCoerce x) (result_error "readJSON: not a number")
+    writeJSON = unsafeCoerce
 
 
 toJSString :: Bhv String -> Bhv JSString

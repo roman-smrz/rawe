@@ -48,16 +48,16 @@ data Attribute = AttrVal String String  -- ^ Key-value pair
 -- | Type class used to enable adding attributes to values of both types
 -- Html and Html -> Html.
 class Attributable b where
-        (!) :: b -> Attribute -> b
+    (!) :: b -> Attribute -> b
 
 
 instance BhvValue Attribute where
-        bhvValue (AttrVal name value) = do
-                (RawJS jn) <- bhvValue name; (RawJS jv) <- bhvValue value
-                return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
-        bhvValue (AttrBool name) = do
-                (RawJS jn) <- bhvValue name
-                return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
+    bhvValue (AttrVal name value) = do
+        (RawJS jn) <- bhvValue name; (RawJS jv) <- bhvValue value
+        return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
+    bhvValue (AttrBool name) = do
+        (RawJS jn) <- bhvValue name
+        return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
 
 
 -- | The structure of HTML tree.
@@ -72,32 +72,32 @@ data HtmlStructure = Tag String [Attribute] [HtmlStructure] -- ^ Tag with conten
 -- | The inner state kept in the HtmlM monad.
 
 data HtmlState = HtmlState
-        { hsUniq :: Int
-            -- ^ Counter for generating unique values
+    { hsUniq :: Int
+        -- ^ Counter for generating unique values
 
-        , hsBehaviours :: [(Int, String, [RawJS])]
-            -- ^ List of behaviours with their id, name of the JavaScript
-            -- constructor and list of parameters passed to it
+    , hsBehaviours :: [(Int, String, [RawJS])]
+        -- ^ List of behaviours with their id, name of the JavaScript
+        -- constructor and list of parameters passed to it
 
-        , hsHtmlValues :: [(Int, String, Maybe String)]
-            -- ^ List of HTML values with ID of the snipped, the HTML code and
-            -- possibly assigned inner value
+    , hsHtmlValues :: [(Int, String, Maybe String)]
+        -- ^ List of HTML values with ID of the snipped, the HTML code and
+        -- possibly assigned inner value
 
-        , hsHtmlCurrent :: Maybe Int
-            -- ^ Set, if we are currently rendering HTML for some other
-            -- behaviour
+    , hsHtmlCurrent :: Maybe Int
+        -- ^ Set, if we are currently rendering HTML for some other
+        -- behaviour
 
-        , hsHtmlBehaviours :: [(Int, Maybe Int)]
-            -- ^ Assignments of behaviours to parts of some HTML snippet or the
-            -- main page if none given
+    , hsHtmlBehaviours :: [(Int, Maybe Int)]
+        -- ^ Assignments of behaviours to parts of some HTML snippet or the
+        -- main page if none given
 
-        , hsHtmlGens :: [(Int, Maybe Int)]
-            -- ^ Assignments the generating behaviour to part of some HTML
-            -- snipped or the main page
+    , hsHtmlGens :: [(Int, Maybe Int)]
+        -- ^ Assignments the generating behaviour to part of some HTML
+        -- snipped or the main page
 
-        , hsRecursion :: Int
-            -- ^ Level of recursion in executing HtmlM monads.
-        }
+    , hsRecursion :: Int
+        -- ^ Level of recursion in executing HtmlM monads.
+    }
 
 emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0
 
@@ -112,27 +112,27 @@ type Html = HtmlM ()
 
 
 instance Functor HtmlM where
-        fmap f (HtmlM hf) = HtmlM $ \s -> (\(x, hs)->(f x, hs)) (hf s)
+    fmap f (HtmlM hf) = HtmlM $ \s -> (\(x, hs)->(f x, hs)) (hf s)
 
 instance Monad HtmlM where
-        return x = HtmlM $ \s -> (x, ([], s))
-        (HtmlM f) >>= g = HtmlM $ \s -> let (x, (cs, s')) = f s
-                                            (HtmlM g') = g x
-                                            (y, (ds, s'')) = g' s'
-                                         in (y, (cs++ds, s''))
+    return x = HtmlM $ \s -> (x, ([], s))
+    (HtmlM f) >>= g = HtmlM $ \s -> let (x, (cs, s')) = f s
+                                        (HtmlM g') = g x
+                                        (y, (ds, s'')) = g' s'
+                                     in (y, (cs++ds, s''))
 
 instance MonadFix HtmlM where
-        mfix f = HtmlM $ \s -> let (HtmlM f') = f x
-                                   (x, s') = f' s
-                                in (x, s')
+    mfix f = HtmlM $ \s -> let (HtmlM f') = f x
+                               (x, s') = f' s
+                            in (x, s')
 
 instance MonadState HtmlState HtmlM where
-        get = HtmlM $ \s -> (s, ([], s))
-        put s = HtmlM $ \_ -> ((), ([], s))
+    get = HtmlM $ \s -> (s, ([], s))
+    put s = HtmlM $ \_ -> ((), ([], s))
 
 
 instance IsString Html where
-        fromString text = HtmlM $ \s -> ((), ([Text text], s))
+    fromString text = HtmlM $ \s -> ((), ([Text text], s))
 
 -- | Function used to include text node into the HTML page. Forces the type
 -- Html insted of arbitrary HtmlM a inferred when using overloaded strings
@@ -255,23 +255,23 @@ instance BhvValue Int where bhvValue x = return.RawJS $ "cthunk("++show x++")"
 instance BhvValue Bool where bhvValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
 
 instance BhvValue Char where
-        bhvValue x = return.RawJS $ "cthunk("++show x++")"
+    bhvValue x = return.RawJS $ "cthunk("++show x++")"
 
 instance (BhvValue a, BhvValue b) => BhvValue (a, b) where
-        bhvValue (x,y) = do
-                (RawJS x') <- bhvValue x; (RawJS y') <- bhvValue y
-                return.RawJS $ "cthunk(["++x'++", "++y'++"])"
+    bhvValue (x,y) = do
+        (RawJS x') <- bhvValue x; (RawJS y') <- bhvValue y
+        return.RawJS $ "cthunk(["++x'++", "++y'++"])"
 
 instance (BhvValue a) => BhvValue (Maybe a) where
-        bhvValue (Just x) = do (RawJS jx) <- bhvValue x
-                               return.RawJS $ "cthunk({Just:"++jx++"})"
-        bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
+    bhvValue (Just x) = do (RawJS jx) <- bhvValue x
+                           return.RawJS $ "cthunk({Just:"++jx++"})"
+    bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
 
 instance BhvValue a => BhvValue [a] where
-        bhvValue [] = return.RawJS $ "cthunk({nil:[]})"
-        bhvValue (x:xs) = do RawJS jx <- bhvValue x
-                             RawJS jxs <- bhvValue xs
-                             return.RawJS $ "cthunk({cons:["++jx++","++jxs++"]})"
+    bhvValue [] = return.RawJS $ "cthunk({nil:[]})"
+    bhvValue (x:xs) = do RawJS jx <- bhvValue x
+                         RawJS jxs <- bhvValue xs
+                         return.RawJS $ "cthunk({cons:["++jx++","++jxs++"]})"
 
 
 
@@ -460,6 +460,6 @@ newtype RawJS = RawJS { unRawJS :: String }
 instance IsString RawJS where fromString = RawJS
 
 escapeStringJS = (>>=helper)
-        where helper '\n' = "\\n"
-              helper c | c `elem` "'\"\\" = '\\':c:[]
-                       | otherwise        = [c]
+    where helper '\n' = "\\n"
+          helper c | c `elem` "'\"\\" = '\\':c:[]
+                   | otherwise        = [c]
