@@ -1,8 +1,87 @@
+/*******************************************************************************
+ *
+ * reactive-prim.js: Implementation of primitive operators
+ * as part of rawe - ReActive Web Framework
+ *
+ * Copyright 2011, Roman Smrž <roman.smrz@seznam.cz>
+ *
+ *
+ * In this file all the primitives used to created behaviour functions and are
+ * assigned to the rawe.prim namespace.
+ *
+ * Parameters are passed either during initialization to the initialization
+ * function itself (in cases of functions like compose or product), or during
+ * evaluation to the assigned compute function. In the latter case, they are
+ * passed in a single formal parameter arranged into tuples: first parameter
+ * is param.get()[0], second param.get()[1].get()[0] and so on.
+ *
+ */
+
+
 var prim = rawe.prim;
+
+
+/******************************************************************************/
+/*	Basic primitives
+/******************************************************************************/
+
+
+/******************************************************************************/
+// 	Category
+
+
+/* Simple identity function */
 
 prim.id = function() {
 	this.compute = function(x) { return x; }
 }
+
+/* Composition of functions */
+
+prim.compose = function(f, g) {
+	this.add_depend(f.get());
+	this.add_depend(g.get());
+
+	this.compute = function(x) {
+		var y = f.get().compute(x);
+		return g.get().compute(y);
+	};
+}
+
+
+
+/******************************************************************************/
+// 	PreCartesian
+
+
+/* Cartesian product - parameter is passed to two functions and a tuple is
+ * formed from their results */
+
+prim.product = function(f, g) {
+	this.add_depend(f.get());
+	this.add_depend(g.get());
+	this.compute = function(x) { return new rawe.Thunk(function() {
+		return [f.get().compute(x), g.get().compute(x)];
+        }); };
+}
+
+/* Gettings first and second component of a tuple */
+
+prim.fst = function() {
+	this.compute_unbox = function(x) { return x.get()[0]; }
+}
+
+prim.snd = function() {
+	this.compute_unbox = function(x) { return x.get()[1]; }
+}
+
+
+
+/******************************************************************************/
+// 	Cartesian Closed
+
+
+/* Application - we get a pair of function and parameter and return the result */
 
 prim.apply = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
@@ -12,6 +91,8 @@ prim.apply = function() {
 		return res.get();
 	}); };
 }
+
+/* Currying and uncurrying primitives */
 
 prim.curry = function(f) {
 	this.add_depend(f.get());
@@ -27,6 +108,30 @@ prim.uncurry = function(f) {
 	}); };
 }
 
+
+/******************************************************************************/
+// 	Other functions
+
+/* Constant behaviour function */
+
+prim.const = function(value) {
+	this.compute = function() {
+		if (value.get().constructor.name == 'BhvFun')
+			this.add_depend(value.get());
+		return value;
+	};
+}
+
+/* Joining two levels of behaviours */
+
+prim.bjoin = function(out) {
+	this.compute = function(x) {
+		return out.get().compute().get().compute(x);
+	}
+}
+
+/* Wrapping and unwrapping with the Bhv constructor */
+
 prim.bhv_wrap = function() {
 	var bhv = this;
 	this.compute = function(x) { return new rawe.Thunk(function() {
@@ -39,9 +144,35 @@ prim.bhv_wrap = function() {
 
 prim.bhv_unwrap = function() {
 	this.compute = function(x) { return new rawe.Thunk(function() {
-		return x.get().compute(rawe.cthunk({})).get();
+		return x.get().compute().get();
 	}); };
 }
+
+/* Fixpoint operator – create a thunk and pass it into i given function and let
+ * the lazy evaluation work */
+
+prim.fix = function() {
+	this.compute = function(f) {
+                var thunk;
+                thunk = new rawe.Thunk(function() {
+			return f.get()(thunk).get();
+                });
+                return thunk;
+        }
+}
+
+
+
+/******************************************************************************/
+/*	HTML functions
+/******************************************************************************/
+
+
+/******************************************************************************/
+//	Manipulation with HTML
+
+/* Adding attribute (from the second parameter) to the HTML snippet (in the
+ * first parameter) */
 
 prim.add_attr = function() {
         this.compute_ = function(params) {
@@ -59,6 +190,46 @@ prim.add_attr = function() {
         }
 }
 
+/* Append to HTML snippets */
+
+prim.append_html = function() {
+	this.compute_ = function(params) {
+		return params[0].get().add(params[1].get());
+	};
+}
+
+/* Until works similarily to '\x -> maybe x id', but keeps the inner value of
+ * the x :: (Bhv HtmlM a) parameter even when the second one becomes Just */
+
+prim.html_until = function(def, mb) {
+	this.add_depend(def.get());
+	this.add_depend(mb.get());
+
+	this.compute = function() { return new rawe.Thunk(function() {
+		var x = mb.get().compute().get();
+		var y = def.get().compute().get();
+
+		if (typeof(x.Just) != 'undefined') {
+			xj = x.Just.get();
+
+			// we need to copy the property representing the inner
+			// value:
+			xj.prop('rawe_html_inner', y.prop('rawe_html_inner'));
+			return xj;
+		}
+		// Nothing -> just return the default
+		return y;
+	}); };
+
+	// This is needed for mutually dependent values to work
+	this.html_inner = function() {
+		return def.get().html_inner();
+	}
+}
+
+/* Gets the inner value of HtmlM a - just reads the relevant property using
+ * html_inner() method */
+
 prim.bhv_to_html_inner = function(out) {
 	var b = this;
 	this.add_depend(out.get());
@@ -71,75 +242,12 @@ prim.bhv_to_html_inner = function(out) {
 	}); };
 }
 
-prim.bjoin = function(out) {
-	this.compute = function(x) {
-		return out.get().compute().get().compute(x);
-	}
-}
 
-// BehaviourFun a b -> BehaviourFun b c -> BehaviourFun a c
-prim.compose = function(f, g) {
-	this.add_depend(f.get());
-	this.add_depend(g.get());
+/******************************************************************************/
+//	Generating elements
 
-	this.compute = function(x) {
-		var y = f.get().compute(x);
-		return g.get().compute(y);
-	};
-}
 
-// a -> BehaviourFun b a
-prim.const = function(value) {
-	this.compute = function(x) {
-		if (value.get().constructor.name == 'BhvFun')
-			this.add_depend(value.get());
-
-                return new rawe.Thunk(function() {
-                        var vg = value.get();
-			if (vg.constructor.name == 'BhvFun') {
-				bhv = new rawe.BhvFun();
-                                bhv.compute = function(x) {
-					return vg.compute(x);
-                                };
-                                return bhv;
-                        }
-                        return vg;
-                });
-        };
-}
-
-prim.debug = function() {
-        this.compute_ = function(x) {
-                alert(x[0].get() + ': ' + x[1].get());
-                return x[1].get();
-        };
-}
-
-prim.fix = function() {
-	this.compute = function(x) {
-                var thunk;
-                thunk = new rawe.Thunk(function() {
-			return x.get()(thunk).get();
-                });
-                return thunk;
-        }
-}
-
-prim.eq = function() {
-        this.compute_ = function(params) {
-                return params[0].get() == params[1].get();
-        };
-}
-
-prim.eq_string = function() {
-        this.compute_ = function(params) {
-                return params[0].get() == params[1].get();
-        };
-}
-
-prim.error = function() {
-        this.compute_ = function(msg) { alert(msg); };
-}
+/* General template for generating primitives */
 
 prim.gen = function() {
         this.compute = function() {
@@ -154,6 +262,8 @@ prim.gen = function() {
 
 	this.gen.prop('rawe_bhv_gen', this);
 }
+
+/* Textfild - monitor changes and keyups */
 
 prim.gen_input_text = function() {
 	prim.gen.call(this);
@@ -172,6 +282,8 @@ prim.gen_input_text = function() {
 
 	elem.removeAttr('bhv-gen');
 }
+
+/* Buttons generate events when clicked */
 
 prim.gen_input_button = function() {
 	prim.gen.call(this);
@@ -197,6 +309,8 @@ prim.gen_input_submit = function() {
 	});
 }
 
+/* Form generates an event containing all the information from it when sent */
+
 prim.gen_form = function() {
 	prim.gen.call(this);
 	var b = this;
@@ -216,34 +330,13 @@ prim.gen_form = function() {
 }
 
 
+/******************************************************************************/
+//	Communication with server
 
-prim.lt_int = function() {
-        this.compute_ = function(params) {
-                return params[0].get() < params[1].get();
-        }
-}
-
-prim.plus = function() {
-        this.compute_ = function(x) { return x[0].get()+x[1].get(); }
-}
-
-prim.fst = function() {
-	this.compute_unbox = function(x) { return x.get()[0]; }
-}
-
-prim.snd = function() {
-	this.compute_unbox = function(x) { return x.get()[1]; }
-}
-
-prim.product = function(f, g) {
-	this.add_depend(f.get());
-	this.add_depend(g.get());
-	this.compute = function(x) { return new rawe.Thunk(function() {
-		return [f.get().compute(x), g.get().compute(x)];
-        }); };
-}
+/* Request a value form the server using GET method */
 
 prim.sget = function(name) {
+	// already received values are registered here
         this.values = [];
         var b = this;
 
@@ -264,6 +357,9 @@ prim.sget = function(name) {
         };
 }
 
+/* On an event, send data to the server using POST method and process the
+ * answer when it is received */
+
 prim.post = function(name, signal) {
 	var result = rawe.cthunk( { NotYet: null } );
 	var last_result = -1;
@@ -273,6 +369,9 @@ prim.post = function(name, signal) {
 
 	this.invalidate = function() {
 		var x = signal.get().compute().get();
+
+		// Only react if same event happend and it is a later time than
+		// we already dealt with
 
 		if (typeof x.OnTime == 'undefined' || x.OnTime[0].get() <= this.last_change)
 			return;
@@ -284,6 +383,8 @@ prim.post = function(name, signal) {
 		for (i in obj) post[i] = obj[i].get();
 
 		$.post(document.location.href+'?q='+name.get(), post, function(json) {
+			// if we already got an answer from a later request, we
+			// just ignore this one
 			if (last_result > x.OnTime[0].get())
 				return;
 
@@ -295,10 +396,15 @@ prim.post = function(name, signal) {
 		});
 	};
 
+	/* To force initialization */
 	this.init = this.invalidate;
 
 	this.compute = function() { return result; };
 }
+
+
+/******************************************************************************/
+//	Converting to HTML
 
 prim.to_html_int = function() {
         this.compute_ = function(x) {
@@ -313,41 +419,67 @@ prim.to_html_jsstring = function() {
 	};
 }
 
-prim.append_html = function() {
-	this.compute_ = function(params) {
-		return params[0].get().add(params[1].get());
-	};
+
+/******************************************************************************/
+/*	JavaScript operators
+/******************************************************************************/
+
+
+/******************************************************************************/
+//	Logical
+
+prim.eq = function() {
+        this.compute_ = function(params) {
+                return params[0].get() == params[1].get();
+        };
 }
 
-prim.html_until = function(def, mb) {
-	this.add_depend(def.get());
-	this.add_depend(mb.get());
 
-	this.compute = function() { return new rawe.Thunk(function() {
-		var x = mb.get().compute().get();
-		var y = def.get().compute().get();
+/******************************************************************************/
+//	Arithmetic
 
-		if (typeof(x.Just) != 'undefined') {
-			xj = x.Just.get();
-			xj.prop('rawe_html_inner', y.prop('rawe_html_inner'));
-			return xj;
-			return x.Just.get().prop('rawe_html_inner', y.prop('rawe_html_inner'));
-		}
-		return y;
-	}); };
-
-	this.html_inner = function() {
-		return def.get().html_inner();
-	}
+prim.lt_int = function() {
+        this.compute_ = function(params) {
+                return params[0].get() < params[1].get();
+        }
 }
+
+prim.plus = function() {
+        this.compute_ = function(x) { return x[0].get()+x[1].get(); }
+}
+
+
+/******************************************************************************/
+//	Other
 
 prim.typeof = function() {
 	this.compute_ = function(x) { return typeof x; }
 }
 
 
+prim.debug = function() {
+        this.compute_ = function(x) {
+                alert(x[0].get() + ': ' + x[1].get());
+                return x[1].get();
+        };
+}
 
-/* JSON interface */
+prim.error = function() {
+        this.compute_ = function(msg) { alert(msg); };
+}
+
+
+
+
+/******************************************************************************/
+/*	Constructors and destructors and related functions
+/******************************************************************************/
+
+/******************************************************************************/
+//	JavaScript strings and objects
+
+/* We need to work with ADT representation of linked listes were, hence the
+ * traversing in the while loops */
 
 prim.to_js_string = function() {
 	this.compute = function(cur) { return new rawe.Thunk(function() {
@@ -416,8 +548,8 @@ prim.js_object_fmap = function() {
 }
 
 
-
-/* Bool constructors and destructor */
+/******************************************************************************/
+//	Bool
 
 prim.true = function() {
         this.compute = function() { return rawe.cthunk(true); };
@@ -438,7 +570,8 @@ prim.bool = function() {
 }
 
 
-/* List constructors and destructor */
+/******************************************************************************/
+//	List
 
 prim.nil = function() {
 	this.compute = function() { return rawe.cthunk( { 'nil': [] }); };
@@ -462,7 +595,8 @@ prim.list = function() {
 }
 
 
-/* Maybe constructors and destructor */
+/******************************************************************************/
+//	Maybe
 
 prim.nothing = function() {
         this.compute = function() { return rawe.cthunk({ Nothing: null }); };
@@ -485,7 +619,8 @@ prim.maybe = function() {
 }
 
 
-/* Timed constructors and destructor */
+/******************************************************************************/
+//	Timed
 
 prim.not_yet = function() {
 	this.compute = function() { return rawe.cthunk({ NotYet: [] }); };
@@ -536,7 +671,8 @@ prim.timed_fold = function(step, def, ev) {
 }
 
 
-/* Result constructors and destructor */
+/******************************************************************************/
+//	Result
 
 prim.result_error = function() {
 	this.compute = function(x) { return rawe.cthunk({ Error: [x] }); };
