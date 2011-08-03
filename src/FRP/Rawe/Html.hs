@@ -326,7 +326,7 @@ container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
                                          in ((), ([Tag tag [] content], s'))
 
 tag :: String -> Html
-tag name = HtmlM $ \s -> ((), ([Tag name [] []], s))
+tag name = HtmlM $ \s -> ((), ([TagVoid name []], s))
 
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Bhv a)
@@ -338,8 +338,11 @@ htmlGen name tag (HtmlM f) = do
                        s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
 
 input :: String -> HtmlM (Bhv a)
-input t = htmlGen ("input_"++t) (Tag "input" [AttrVal "type" t]) (return ())
+input t = htmlGen ("input_"++t) (\_ -> TagVoid "input" [AttrVal "type" t]) (return ())
 
+
+doctype :: Html
+doctype = HtmlM $ \s -> ((), ([Doctype], s))
 
 
 a :: Html -> Html
@@ -373,7 +376,7 @@ head_ content = container "head" $ do
     content
 
 html :: Html -> Html
-html = container "html"
+html content = doctype >> container "html" content
 
 li :: Html -> Html
 li = container "li"

@@ -74,6 +74,7 @@ instance Attributable (HtmlM a -> HtmlM a) where
 
 addAttr :: Attribute -> HtmlStructure -> HtmlStructure
 addAttr a (Tag name as content) = Tag name (a:as) content
+addAttr a (TagVoid name as) = TagVoid name (a:as)
 addAttr _ t = t
 
 instance Attributable (Bhv Html) where
@@ -94,6 +95,8 @@ instance BhvPrim AddAttr Html Html where
 
 -- | The structure of HTML tree.
 data HtmlStructure = Tag String [Attribute] [HtmlStructure] -- ^ Tag with content
+                   | TagVoid String [Attribute]             -- ^ Tag without content
+                   | Doctype        -- ^ Doctype declaration
                    | Text String    -- ^ Text node
                    | Behaviour Int  -- ^ Placeholder for HTML behaviour identified by the parameter
 
@@ -471,6 +474,13 @@ renderH (HtmlM f) = do
               tell ">\n"
               mapM render' xs
               tell $ "</" ++ tag ++ ">\n"
+
+          render' (TagVoid tag attrs) = do
+              tell $ "<" ++ tag
+              mapM_ renderAttrs attrs
+              tell ">\n"
+
+          render' (Doctype) = tell "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n"
 
           render' (Text text) = tell text
 
