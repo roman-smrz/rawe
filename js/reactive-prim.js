@@ -293,6 +293,7 @@ prim.gen_input_button = function() {
 
 	b.value = rawe.cthunk({ NotYet: [] });
 	elem.click(function(e) {
+		e.preventDefault();
 		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk([])] }));
 	});
 }
@@ -308,6 +309,8 @@ prim.gen_input_submit = function() {
 		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk(elem.val())] }));
 	});
 }
+
+prim.gen_ae = prim.gen_input_button;
 
 /* Form generates an event containing all the information from it when sent */
 

@@ -51,7 +51,7 @@ module FRP.Rawe.Html (
 
     -- ** HTML elements
 
-    a,
+    a, ae,
     body, br, button,
     div_,
     form, form',
@@ -346,6 +346,13 @@ doctype = HtmlM $ \s -> ((), ([Doctype], s))
 
 a :: Html -> Html
 a = container "a"
+
+-- | Inserts an <a> element with href set to "#" and generates an event
+-- triggering whenever is this element clicked on, sampling the value of the
+-- behaviour from the first parameter.
+
+ae :: Bhv String -> Html -> HtmlM (Event String)
+ae s = fmap (R.fmap $ const s) . htmlGen "ae" (Tag "a" [AttrVal "href" "#"])
 
 body :: Html -> Html
 body content = container "body" $ do
