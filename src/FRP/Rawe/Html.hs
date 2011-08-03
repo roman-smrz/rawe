@@ -79,6 +79,10 @@ module FRP.Rawe.Html (
 
     -- ** HTML attribuets
 
+    -- | Functions for only a few attributes are predefined here currently;
+    -- other may be generated using the attr function.
+
+    attr,
     name,
     src, style,
     type_,
@@ -648,11 +652,22 @@ xmp = container "xmp"
 --------------------------------------------------------------------------------
 --  Html attributes
 
+attr :: String -> String -> Attribute
+attr = AttrVal
 
+name :: String -> Attribute
 name = AttrVal "name"
+
+src :: String -> Attribute
 src = AttrVal "src"
+
+style :: String -> Attribute
 style = AttrVal "style"
+
+type_ :: String -> Attribute
 type_ = AttrVal "type"
+
+value :: String -> Attribute
 value = AttrVal "value"
 
 
