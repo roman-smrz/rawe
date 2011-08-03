@@ -2,6 +2,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- Prelude.hs: reimplementation of most of the Haskell standard prelude
 -- as part of rawe - ReActive Web Framework
@@ -66,6 +69,15 @@ module FRP.Rawe.Prelude (
     any, all, elem, notElem, lookup,
     sum, product, maximum, minimum,
     zip, zipWith, unzip,
+
+
+    -- * Rawe-specific declarations
+
+    -- ** Generalized currying and fixpoint operator
+
+    BhvCurrying(..),
+    bjoin,
+    fix, BhvFix(..),
 
 ) where
 
@@ -667,3 +679,58 @@ zipWith f = bfix $ (\z -> \xs ys -> list nil (\x xs' -> list nil (\y ys' -> f x 
 
 unzip            :: Bhv [(a,b)] -> Bhv ([a],[b])
 unzip            =  foldr (\x xs -> (fst x ~: fst xs) &&& (snd x ~: snd xs)) (nil &&& nil)
+
+
+
+-- Rawe-specific declarations
+
+-- | Class allowing currying and uncurrying of functions of arbitrary arity.
+
+class BhvCurrying a ps r | a -> ps r where
+        -- | uncurryAll has the type
+        -- (Bhv a1 -> Bhv a2 -> ... -> Bhv an -> Bhv b) ->
+        -- (Bhv (a1, (a2, ( ... (an-1, an) ... ))) -> Bhv b)
+        uncurryAll :: a -> Bhv ps -> r
+
+        -- | curryAll has the type
+        -- (Bhv (a1, (a2, ( ... (an-1, an) ... ))) -> Bhv b) ->
+        -- (Bhv a1 -> Bhv a2 -> ... -> Bhv an -> Bhv b)
+        curryAll :: (Bhv ps -> r) -> a
+
+instance BhvCurrying (Bhv a -> Bhv b) a (Bhv b) where
+        uncurryAll = id
+        curryAll = id
+
+instance (BhvCurrying (Bhv b -> r) ps r') =>
+        BhvCurrying (Bhv a -> Bhv b -> r) (a, ps) r' where
+
+        uncurryAll f = uncurry (\x -> uncurryAll (f x))
+        curryAll f = \x -> curryAll $ (curry f) x
+
+
+-- | Somwhat generalized version of joining two layers of Bhv
+
+bjoin :: Bhv (BhvFun a b) -> BhvFun a b
+bjoin = prim . BhvModifier (unsafeBfEval . ($void)) "bjoin"
+
+-- | Fixpoint operator for single behaviour
+
+fix :: (Bhv a -> Bhv a) -> Bhv a
+fix = primOp1 (\f -> let x = f x in x) "fix"
+
+
+-- | Class generalizing the fixpoint for function of arbitrary arity. It allows
+-- to write recursive functions like
+--
+-- > foldl :: (Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv [b] -> Bhv a
+-- > foldl f = bfix (\fld -> \z -> list z (\x xs -> fld (f z x) xs))
+
+class BhvFix a where
+        bfix :: (a -> a) -> a
+
+instance BhvFix (Bhv a) where
+        bfix = fix
+
+instance (BhvFix b, BhvCurrying (Bhv a -> b) ps (Bhv d)) => BhvFix (Bhv a -> b) where
+        bfix f = curryAll $ bhvToHask $ bjoin $ fix
+            (cb . haskToBhv . uncurryAll . f . curryAll . bhvToHask . bjoin)
