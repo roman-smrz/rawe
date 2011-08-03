@@ -110,13 +110,13 @@ instance ToHtmlBhv Html where
     toHtml = id
 
 instance ToHtmlBhv Int where
-    toHtml = unOp "to_html_int"
+    toHtml = primOp1 (span.str.show) "to_html_int"
 
 instance ToHtmlBhv String where
     toHtml = toHtml . toJSString
 
 instance ToHtmlBhv JSString where
-    toHtml = unOp "to_html_jsstring"
+    toHtml = primOp1 (span . str . J.fromJSString) "to_html_jsstring"
 
 
 instance ToHtmlBhv [Html] where
@@ -140,9 +140,9 @@ instance BehaviourToHtml () where
 instance BehaviourToHtml (Bhv a) where
     bhv x = do ~(r,id) <- addBehaviour x
                cur <- gets hsHtmlCurrent
-               jbhv <- bhvValue (Assigned (r,id) :: Bhv (HtmlM (Bhv a)))
+               jbhv <- bhvValue (Assigned (error "eval: bhv") (r,id) :: Bhv (HtmlM (Bhv a)))
                nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
-               HtmlM $ \s -> (Assigned nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
+               HtmlM $ \s -> (Assigned (error "eval: bhv inner") nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 
 instance BhvValue Html where
@@ -194,48 +194,49 @@ instance BJSON Int where
     writeJSON = unsafeCoerce
 
 instance R.BEq JSString where
-        (==) = binOp "eq"
+    (==) = primOp2 (==) "eq"
 
 
 --------------------------------------------------------------------------------
 --  Result constructors and destructor
 
 result_ok :: Bhv a -> Bhv (Result a)
-result_ok = unOp "result_ok"
+result_ok = primOp1 Ok "result_ok"
 
 result_error :: Bhv String -> Bhv (Result a)
-result_error = unOp "result_error"
+result_error = primOp1 Error "result_error"
 
 result :: (Bhv a -> Bhv b) -> (Bhv String -> Bhv b) -> Bhv (Result a) -> Bhv b
-result = primOp3 "result"
+result = primOp3 (\o e r -> case r of Ok x -> o x; Error s -> e s) "result"
 
 
 --------------------------------------------------------------------------------
 --  JSON types, functions and instances
 
 toJSObject' :: Bhv [(JSString, a)] -> Bhv (JSObject a)
-toJSObject' = unOp "to_js_object"
+toJSObject' = primOp1 (J.toJSObject . map (\(x,y) -> (J.fromJSString x, y))) "to_js_object"
 
 toJSObject :: Bhv [(String, a)] -> Bhv (JSObject a)
 toJSObject = toJSObject' . R.map (\x -> toJSString (fst . x) &&& (snd . x))
 
 fromJSObject' :: Bhv (JSObject a) -> Bhv [(JSString, a)]
-fromJSObject' = unOp "from_js_object"
+fromJSObject' = primOp1 (map (\(x,y) -> (J.toJSString x, y)) . J.fromJSObject) "from_js_object"
 
 fromJSObject :: Bhv (JSObject a) -> Bhv [(String, a)]
 fromJSObject = R.map (\x -> fromJSString (fst . x) &&& (snd . x)) . fromJSObject'
 
 instance R.BFunctor JSObject where
-    fmap = primOp2 "js_object_fmap"
+    fmap = primOp2 (\f -> J.toJSObject . map (fmap f) . J.fromJSObject) "js_object_fmap"
 
 
-{- Other functions -}
+--------------------------------------------------------------------------------
+--  Other functions
 
 unsafeCoerce :: Bhv a -> Bhv b
-unsafeCoerce = (.) (Assigned (0,0))
+unsafeCoerce = (.) (Assigned (error "eval: unsafeCoerce") (0,0))
 
 typeof' :: Bhv JSValue -> Bhv JSString
-typeof' = unOp "typeof"
+typeof' = primOp1 (error "eval: typeof") "typeof"
 
 typeof :: Bhv JSValue -> Bhv String
 typeof = fromJSString . typeof'
@@ -258,7 +259,7 @@ sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
 post' :: String -> Bhv (Timed (JSObject JSString)) -> HtmlM (Bhv (Maybe JSValue))
 post' name signal = do jname <- bhvValue $ J.toJSString name
                        jsignal <- bhvValue signal
-                       fmap Assigned $ addBehaviourName "post" [jname, jsignal]
+                       fmap (Assigned (const Nothing)) $ addBehaviourName "post" [jname, jsignal]
 
 
 post :: (BJSON a) => String -> Bhv (Timed [(String,String)]) -> HtmlM (Bhv (Maybe a))
@@ -334,7 +335,7 @@ htmlGen name tag (HtmlM f) = do
     bid@(~(_,i)) <- addBehaviourName ("gen_"++name) []
     cur <- gets hsHtmlCurrent
     HtmlM $ \s -> let (_, (content, s')) = f s
-                   in (Assigned bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
+                   in (Assigned (error "eval: htmlGen") bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
                        s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
 
 input :: String -> HtmlM (Bhv a)
@@ -425,7 +426,7 @@ t2m :: Bhv (Timed a) -> Bhv (Maybe a)
 t2m = timed R.nothing (const R.just)
 
 appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
-appendHtml = binOp "append_html"
+appendHtml = primOp2 (>>) "append_html"
 
 until :: Bhv (HtmlM a) -> Bhv (Maybe Html) -> Bhv (HtmlM a)
-until x m = Prim $ BhvModifier2 "html_until" x m
+until x m = Prim $ BhvModifier2 (error "eval: until") "html_until" x m

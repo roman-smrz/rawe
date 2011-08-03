@@ -78,7 +78,7 @@ addAttr a (TagVoid name as) = TagVoid name (a:as)
 addAttr _ t = t
 
 instance Attributable (Bhv Html) where
-    (!) = primOp2 "add_attr"
+    (!) = primOp2 (!) "add_attr"
 
 
 data AddAttr = AddAttr Attribute
@@ -89,6 +89,7 @@ instance BhvPrim AddAttr Html Html where
     bhvPrim (AddAttr (AttrBool name)) = do
         jname <- bhvValue name; jval <- bhvValue True
         return ("add_attr", [jname, jval])
+    unsafeBhvEval (AddAttr a) = (!a)
 
 
 
@@ -209,7 +210,7 @@ addBehaviour b = do
              addBehaviour' nid name params
              return (r,nid)
 
-         Assigned id -> return id
+         Assigned _ id -> return id
          BhvID -> return (0,0)
 
 
@@ -231,7 +232,7 @@ htmlLocal action = do
 -- * Behaviours
 
 data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
-                | Assigned (Int, Int)
+                | Assigned (a -> b) (Int, Int)
                 | (a ~ b) => BhvID
 
 type Bhv a = BhvFun Void a
@@ -241,7 +242,7 @@ instance Category BhvFun where
     id = BhvID
     BhvID . b = b
     b . BhvID = b
-    g . f = Prim $ BhvModifier2 "compose" f g
+    g . f = Prim $ BhvModifier2 (>>>) "compose" f g
 
 instance PFunctor (,) BhvFun BhvFun where
     first = firstDefault
@@ -271,15 +272,15 @@ instance Monoidal BhvFun (,) where
 
 instance PreCartesian BhvFun where
     type Product BhvFun = (,)
-    x &&& y = Prim $ BhvModifier2 "product" x y
-    fst = primOp "fst"
-    snd = primOp "snd"
+    x &&& y = Prim $ BhvModifier2 (&&&) "product" x y
+    fst = primOp fst "fst"
+    snd = primOp snd "snd"
 
 instance CCC BhvFun where
     type Exp BhvFun = (->)
-    apply = primFunc "apply"
-    curry = Prim . BhvModifier "curry"
-    uncurry = Prim . BhvModifier "uncurry"
+    apply = primOp apply "apply"
+    curry = Prim . BhvModifier curry "curry"
+    uncurry = Prim . BhvModifier uncurry "uncurry"
 
 
 class BhvValue a where
@@ -318,52 +319,65 @@ instance BhvValue a => BhvValue [a] where
 
 class BhvPrim f a b | f -> a b where
     bhvPrim :: f -> HtmlM (String, [RawJS])
+    unsafeBhvEval :: f -> a -> b
 
 
 
-data BhvPrimFunc a b = BhvPrimFunc String
+data BhvPrimFunc a b = BhvPrimFunc (a -> b) String
 instance BhvPrim (BhvPrimFunc a b) a b where
-    bhvPrim (BhvPrimFunc name) = return (name, [])
+    bhvPrim (BhvPrimFunc _ name) = return (name, [])
+    unsafeBhvEval (BhvPrimFunc f _) = f
 
 
-data BhvModifier a b c d = BhvModifier String (BhvFun a b)
+data BhvModifier a b c d = BhvModifier ((a -> b) -> (c -> d)) String (BhvFun a b)
 instance BhvPrim (BhvModifier a b c d) c d where
-    bhvPrim (BhvModifier name x) = do jx <- bhvValue x
-                                      return (name, [jx])
+    bhvPrim (BhvModifier _ name x) = do jx <- bhvValue x
+                                        return (name, [jx])
+    unsafeBhvEval (BhvModifier f _ b) = f (unsafeBfEval b)
 
 
-data BhvModifier2 a b c d e f = BhvModifier2 String (BhvFun a b) (BhvFun c d)
+data BhvModifier2 a b c d e f = BhvModifier2 ((a -> b) -> (c -> d) -> (e -> f)) String (BhvFun a b) (BhvFun c d)
 instance BhvPrim (BhvModifier2 a b c d e f) e f where
-    bhvPrim (BhvModifier2 name x y) = do jx <- bhvValue x; jy <- bhvValue y
-                                         return (name, [jx, jy])
+    bhvPrim (BhvModifier2 _ name x y) = do jx <- bhvValue x; jy <- bhvValue y
+                                           return (name, [jx, jy])
+    unsafeBhvEval (BhvModifier2 f _ b1 b2) = f (unsafeBfEval b1) (unsafeBfEval b2)
 
 
 data BhvConst a b = (BhvValue b) => BhvConst b
 instance BhvPrim (BhvConst a b) a b where
     bhvPrim (BhvConst x) = do jx <- bhvValue x
                               return ("const", [jx])
+    unsafeBhvEval (BhvConst x) = const x
 
 
 cb :: (BhvValue a) => a -> BhvFun b a
 cb = Prim . BhvConst
 
 
-primFunc :: String -> BhvFun a b
-primFunc name = Prim (BhvPrimFunc name)
+primOp :: (a -> b) -> String -> BhvFun a b
+primOp f = Prim . BhvPrimFunc f
 
-unOp :: String -> BhvFun a b -> BhvFun a c
-unOp  name x     = primFunc name .  x
-binOp name x y   = primFunc name . (x &&& y)
-terOp name x y z = primFunc name . (x &&& y &&& z)
+primOp0 :: a -> String -> Bhv a
+primOp0 x name = primOp (const x) name
 
-primOp :: String -> BhvFun a b
-primOp = Prim . BhvPrimFunc
+primOp1 :: BhvValueFun a a' => (a' -> b) -> String -> a -> Bhv b
+primOp1 f name a = primOp f name . (cbf a)
 
-primOp1 name a         = primOp name . (cbf a)
-primOp2 name a b       = primOp name . (cbf a &&& cbf b)
-primOp3 name a b c     = primOp name . (cbf a &&& cbf b &&& cbf c)
-primOp4 name a b c d   = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d)
-primOp5 name a b c d e = primOp name . (cbf a &&& cbf b &&& cbf c &&& cbf d &&& cbf e)
+primOp2 :: (BhvValueFun a a', BhvValueFun b b') => (a' -> b' -> c) -> String -> a -> b -> Bhv c
+primOp2 f name a b = primOp (uncurry f) name . (cbf a &&& cbf b)
+
+primOp3 :: (BhvValueFun a a', BhvValueFun b b', BhvValueFun c c') => (a' -> b' -> c' -> d) -> String -> a -> b -> c -> Bhv d
+primOp3 f name a b c = primOp (uncurry $ \x -> uncurry (f x)) name . (cbf a &&& cbf b &&& cbf c)
+
+primOp4 :: (BhvValueFun a a', BhvValueFun b b', BhvValueFun c c', BhvValueFun d d') =>
+    (a' -> b' -> c' -> d' -> e) -> String -> a -> b -> c -> d -> Bhv e
+primOp4 f name a b c d = primOp (uncurry $ \x -> uncurry $ \y -> uncurry (f x y))
+    name . (cbf a &&& cbf b &&& cbf c &&& cbf d)
+
+primOp5 :: (BhvValueFun a a', BhvValueFun b b', BhvValueFun c c', BhvValueFun d d', BhvValueFun e e') =>
+    (a' -> b' -> c' -> d' -> e' -> f) -> String -> a -> b -> c -> d -> e -> Bhv f
+primOp5 f name a b c d e = primOp (uncurry $ \x -> uncurry $ \y -> uncurry $ \z -> uncurry (f x y z))
+    name . (cbf a &&& cbf b &&& cbf c &&& cbf d &&& cbf e)
 
 
 -- ** Lifting of functions
@@ -377,15 +391,18 @@ instance (BhvValue b) => BhvValue (Bhv a -> b) where
 
 class BhvValueFun a b | a -> b where
     bhvValueFun :: a -> HtmlM RawJS
+    bhvValueFunEval :: a -> b
     cbf :: a -> Bhv b
 
 instance BhvValueFun (Bhv a) a where
     bhvValueFun x = do RawJS jx <- bhvValue x
                        return $ RawJS (jx ++ ".get().compute(cthunk(null))")
+    bhvValueFunEval x = (unsafeBfEval x) void
     cbf = id
 
 instance BhvValueFun Attribute Attribute where
     bhvValueFun = bhvValue
+    bhvValueFunEval = id
     cbf = cb
 
 instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
@@ -394,6 +411,7 @@ instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
         , "r_bhv_fun_"++show r++"["++show iid++"] = new BhvFun();"
         , "r_prim_const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
         ]
+    bhvValueFunEval f = \x -> bhvValueFunEval (f (Prim $ BhvConstEval x))
     cbf = Prim . BhvConstFun
 
 
@@ -401,12 +419,13 @@ data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
 instance BhvPrim (BhvConstFun a b b') a b' where
     bhvPrim (BhvConstFun x) = do jx <- bhvValueFun x
                                  return ("const", [jx])
+    unsafeBhvEval (BhvConstFun x) = const (bhvValueFunEval x)
 
 
 bhvValueCommon bv begin f = htmlLocal $ do
     iid <- htmlUniq
     r <- gets hsRecursion
-    RawJS result <- bv $ f (Assigned (r,iid))
+    RawJS result <- bv $ f (Assigned (error "eval: bhvValueCommon") (r,iid))
 
     bs <- gets $ reverse.hsBehaviours
     hs <- gets $ reverse.hsHtmlValues
@@ -447,6 +466,43 @@ bhvValueCommon bv begin f = htmlLocal $ do
         ++
         [ "return "++result++";" ]
 
+
+
+
+
+--------------------------------------------------------------------------------
+-- ** Evaluating to Haskell functions
+
+unsafeBfEval :: BhvFun a b -> a -> b
+unsafeBfEval (Prim f) = unsafeBhvEval f
+unsafeBfEval (Assigned f _) = f
+unsafeBfEval (BhvID) = id
+
+
+instance BhvValue Void where
+    bhvValue _ = return "null"
+
+void :: Void
+void = error "void"
+
+
+
+class BhvEval a b | a -> b where
+    unsafeEval :: a -> b
+    unsafeUneval :: b -> a
+
+instance BhvValue a => BhvEval (Bhv a) a where
+    unsafeEval = flip unsafeBfEval void
+    unsafeUneval = Prim . BhvConstEval
+
+instance (BhvEval a a', BhvEval b b') => BhvEval (a -> b) (a' -> b') where
+    unsafeEval f = unsafeEval . f . unsafeUneval
+    unsafeUneval f = unsafeUneval . f . unsafeEval
+
+data BhvConstEval a b = BhvConstEval b
+instance BhvPrim (BhvConstEval a b) a b where
+    bhvPrim _ = error "BhvConstEval: bhvPrim"
+    unsafeBhvEval (BhvConstEval x) = const x
 
 
 
@@ -511,13 +567,13 @@ data Timed a = NotYet | OnTime Time a
 
 
 notYet :: Bhv (Timed a)
-notYet = primOp "not_yet"
+notYet = primOp0 NotYet "not_yet"
 
 onTime :: Bhv Time -> Bhv a -> Bhv (Timed a)
-onTime = primOp2 "on_time"
+onTime = primOp2 OnTime "on_time"
 
 timed :: Bhv b -> (Bhv Time -> Bhv a -> Bhv b) -> Bhv (Timed a) -> Bhv b
-timed = primOp3 "timed"
+timed = primOp3 (\ny ot x -> case x of NotYet -> ny; OnTime t y -> ot t y) "timed"
 
 data TimedFold a b = TimedFold (Bhv Time -> Bhv a -> Bhv b -> Bhv a) (Bhv a) (Bhv (Timed b))
 instance BhvPrim (TimedFold a b) Void a where
@@ -526,6 +582,7 @@ instance BhvPrim (TimedFold a b) Void a where
         jdef <- bhvValue def
         jev <- bhvValue ev
         return ("timed_fold", [jstep, jdef, jev])
+    unsafeBhvEval (TimedFold _ def _) = unsafeBfEval def
 
 timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
 timedFold f x = Prim . TimedFold f x
@@ -535,10 +592,10 @@ timedFold f x = Prim . TimedFold f x
 -- ** JSString constructor and destructor
 
 toJSString :: Bhv String -> Bhv JSString
-toJSString = primOp1 "to_js_string"
+toJSString = primOp1 J.toJSString "to_js_string"
 
 fromJSString :: Bhv JSString -> Bhv String
-fromJSString = primOp1 "from_js_string"
+fromJSString = primOp1 J.fromJSString "from_js_string"
 
 instance BhvValue JSString where
     bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (J.fromJSString str)++"')"
@@ -548,10 +605,10 @@ instance BhvValue JSString where
 -- ** Misc primitives
 
 bhvWrap :: BhvFun a (Bhv a)
-bhvWrap = primOp "bhv_wrap"
+bhvWrap = primOp (Prim . BhvConstEval) "bhv_wrap"
 
 bhvUnwrap :: BhvFun (Bhv a) a
-bhvUnwrap = primOp "bhv_unwrap"
+bhvUnwrap = primOp (flip unsafeBfEval void) "bhv_unwrap"
 
 bhvToHask :: BhvFun a b -> (Bhv a -> Bhv b)
 bhvToHask = (.)

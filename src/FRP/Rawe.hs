@@ -72,10 +72,11 @@ type Behaviour a = Bhv a
 
 
 data BhvServer a b = BhvServer String JSString
-instance BhvPrim (BhvServer a b) a b where
+instance BhvPrim (BhvServer a b) a (Maybe b) where
         bhvPrim (BhvServer func name) = do
                 jname <- bhvValue name
                 return (func, [jname])
+        unsafeBhvEval _ = const Nothing
 
 
 
@@ -117,10 +118,10 @@ bcurry :: BehaviourFun (a, b) c -> BehaviourFun d a -> BehaviourFun d b -> Behav
 bcurry f x y = f . (x &&& y)
 
 bjoin :: Behaviour (BehaviourFun a b) -> BehaviourFun a b
-bjoin = Prim . BhvModifier "bjoin"
+bjoin = Prim . BhvModifier (unsafeBfEval . ($void)) "bjoin"
 
 b_fix :: forall a. (Behaviour a -> Behaviour a) -> Behaviour a
-b_fix = primOp1 "fix"
+b_fix = primOp1 (\f -> let x = f x in x) "fix"
 
 
 class BhvFix a where
@@ -138,19 +139,21 @@ instance Eq (BehaviourFun a b) where
         _ == _ = error "Eq instance for behaviours is required for Num, but is meaningless"
 instance Show (BehaviourFun a b) where
         show _ = error "Show instance for behaviours is required for Num, but is meaningless"
-instance Num (BehaviourFun a Int) where
+instance Num (Bhv Int) where
         fromInteger = Prim . BhvConst . fromInteger
-        (+) = binOp "plus"
-        (*) = binOp "times"
-        abs = unOp "abs"
-        signum = unOp "signum"
+        (+) = primOp2 (+) "plus"
+        (*) = primOp2 (*) "times"
+        abs = primOp1 abs "abs"
+        signum = primOp1 signum "signum"
 
+{-
 instance Num (BehaviourFun a (Maybe Int)) where
         fromInteger = Prim . BhvConst . Just . fromInteger
         (+) = binOp "plus_mb"
         (*) = binOp "times_mb"
         abs = unOp "abs_mb"
         signum = unOp "signum_mb"
+        -}
 
 
 
@@ -163,4 +166,4 @@ bhv <-- html = undefined
 
 
 b_debug :: Behaviour String -> Behaviour a -> Behaviour a
-b_debug = binOp "debug"
+b_debug = primOp2 (const id) "debug"

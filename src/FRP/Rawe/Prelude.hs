@@ -38,10 +38,10 @@ import FRP.Rawe.Internal
 
 
 
-instance BEq Int where (==) = primOp2 "eq"
+instance BEq Int where (==) = primOp2 (P.==) "eq"
 
 
-instance BEq Char where (==) = primOp2 "eq"
+instance BEq Char where (==) = primOp2 (P.==) "eq"
 
 
 instance BFunctor ((,) a) where
@@ -50,13 +50,13 @@ instance BFunctor ((,) a) where
 
 
 true :: Bhv Bool
-true = primOp "true"
+true = primOp0 True "true"
 
 false :: Bhv Bool
-false = primOp "false"
+false = primOp0 False "false"
 
 bool :: Bhv a -> Bhv a -> Bhv Bool -> Bhv a
-bool = primOp3 "bool"
+bool = primOp3 (\t f b -> if b then t else f) "bool"
 
 ite :: Bhv Bool -> Bhv a -> Bhv a -> Bhv a
 ite c t f = bool t f c
@@ -73,13 +73,13 @@ not = bool false true
 
 
 nothing :: Bhv (Maybe a)
-nothing = primOp "nothing"
+nothing = primOp0 Nothing "nothing"
 
 just :: Bhv a -> Bhv (Maybe a)
-just = primOp1 "just"
+just = primOp1 Just "just"
 
 maybe :: Bhv b -> (Bhv a -> Bhv b) -> Bhv (Maybe a) -> Bhv b
-maybe = primOp3 "maybe"
+maybe = primOp3 P.maybe "maybe"
 
 instance BEq a => BEq (Maybe a) where
     x == y = maybe (maybe true (const false) y) (\xv -> maybe false (xv ==) y) x
@@ -251,7 +251,7 @@ asTypeOf :: a -> a -> a
 -}
 
 error' :: Bhv JSString -> Bhv a
-error' = primOp1 "error"
+error' = primOp1 (P.error . J.fromJSString) "error"
 
 error :: Bhv String -> Bhv a
 error = error' . toJSString
@@ -264,14 +264,14 @@ seq :: a -> b -> b
 -}
 
 nil :: Bhv [a]
-nil = primOp "nil"
+nil = primOp0 [] "nil"
 
 (~:) :: Bhv a -> Bhv [a] -> Bhv [a]
-(~:) = primOp2 "cons"
+(~:) = primOp2 (:) "cons"
 infixr 5 ~:
 
 list :: Bhv b -> (Bhv a -> Bhv [a] -> Bhv b) -> Bhv [a] -> Bhv b
-list = primOp3 "list"
+list = primOp3 (\n c l -> case l of [] -> n; (x:xs) -> c x xs) "list"
 
 instance BEq a => BEq [a] where
         (==) = bfix $ (\z -> \xs ys -> list (null ys) (\x xs' -> list false (\y ys' -> (x == y) && z xs' ys') ys) xs)
