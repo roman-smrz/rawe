@@ -336,19 +336,18 @@ prim.gen_form = function() {
 /* Request a value form the server using GET method */
 
 prim.sget = function(name) {
-	// already received values are registered here
-        this.values = [];
-        var b = this;
+	name = name.get();
 
-        this.compute_ = function(x) {
-                for (i in this.values) {
-                        if (this.values[i][0] == x) {
-				return { Just: rawe.cthunk( this.values[i][1] ) };
+        var b = this;
+        this.compute_t = function() {
+                for (i in prim.sget.values) {
+                        if (prim.sget.values[i][0] == name) {
+				return { Just: rawe.cthunk( prim.sget.values[i][1] ) };
                         }
                 }
 
-		$.get(document.location.href, { q: name.get() }, function(json) {
-                        b.values.push([x, jQuery.parseJSON(json)]);
+		$.get(document.location.href, { q: name }, function(json) {
+                        prim.sget.values.push([name, jQuery.parseJSON(json)]);
                         rawe.current_time++;
                         b.invalidate();
                 });
@@ -356,6 +355,10 @@ prim.sget = function(name) {
                 return { Nothing: null };
         };
 }
+
+// already received values are registered here
+prim.sget.values = [];
+
 
 /* On an event, send data to the server using POST method and process the
  * answer when it is received */

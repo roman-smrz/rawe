@@ -36,6 +36,12 @@ var rawe = {
 				return new rawe.Thunk(function() { return b.compute_unbox(x).get(); });
 			}
 
+			if (b.compute_t) {
+				return new rawe.Thunk(function() {
+					return b.compute_t(x);
+				});
+			}
+
 			return new rawe.Thunk(function() { return b.compute_(x.get()) });
 		}
 

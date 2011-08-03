@@ -20,9 +20,6 @@ module FRP.Rawe (
     bhvWrap, bhvUnwrap, haskToBhv, bhvToHask,
     cb,
     render,
-
-    -- * To be (re)moved
-    BhvServer(..),
 ) where
 
 
@@ -61,24 +58,6 @@ instance (BhvValue a) => BhvValue (Timed a) where
 
 type BehaviourFun = BhvFun
 type Behaviour a = Bhv a
-
-
-
-
-
-
-
-
-
-data BhvServer a b = BhvServer String JSString
-instance BhvPrim (BhvServer a b) a (Maybe b) where
-        bhvPrim (BhvServer func name) = do
-                jname <- bhvValue name
-                return (func, [jname])
-        unsafeBhvEval _ = const Nothing
-
-
-
 
 
 

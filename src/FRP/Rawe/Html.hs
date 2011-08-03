@@ -246,7 +246,9 @@ typeof = fromJSString . typeof'
 --  Talking to server
 
 sget' :: String -> Bhv (Maybe JSValue)
-sget' = prim . BhvServer "sget" . J.toJSString
+sget' name = Prim (const Nothing) $ do
+    jname <- bhvValue $ J.toJSString name
+    return ("sget", [jname])
 
 sget :: BJSON a => String -> Bhv (Maybe a)
 sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
