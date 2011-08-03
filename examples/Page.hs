@@ -59,3 +59,44 @@ page4 = html $ do
                          submit ! value "="
         sum <- post "sum" req :: HtmlM (Bhv (Maybe Int))
         bhv $ toHtml sum
+
+
+
+{- Example 5 - multiple pages with links -}
+
+-- several sample pages, parts from previous examples
+
+pages :: Bhv [(String, Html)]
+pages = cb $
+    [ ("text", div_ $ do
+        b <- textfield "b"
+        bhv $ toHtml $ length b
+        )
+    , ("server", div_ $ do
+        let count = sget "count" :: Bhv (Maybe Int)
+        bhv $ toHtml count
+        )
+    , ("event", div_ $ do
+        a <- button ! value "+1"
+        bhv $ toHtml $ timedFold (const (+)) (0::Bhv Int) $ fmap (const 1) a
+        br
+        )
+    ]
+
+page5 = html $ do
+    head_ $ do
+        title "Rawe - example 5"
+    body $ do
+        -- the links generates events for clicking ...
+        p1 <- ae "text" $ "Textfields"
+        br
+        p2 <- ae "server" $ "Server get"
+        br
+        p3 <- ae "event" $ "Event fold"
+        br
+
+        --- which can be aggregated
+        let pm = P.foldl1 (evmerge const) [p1, p2, p3] 
+
+        -- and then used to choose a page
+        bhv $ timed "" (\_ k -> maybe "" id (lookup k pages)) pm
