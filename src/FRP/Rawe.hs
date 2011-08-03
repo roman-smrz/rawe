@@ -118,7 +118,7 @@ bcurry :: BehaviourFun (a, b) c -> BehaviourFun d a -> BehaviourFun d b -> Behav
 bcurry f x y = f . (x &&& y)
 
 bjoin :: Behaviour (BehaviourFun a b) -> BehaviourFun a b
-bjoin = Prim . BhvModifier (unsafeBfEval . ($void)) "bjoin"
+bjoin = prim . BhvModifier (unsafeBfEval . ($void)) "bjoin"
 
 b_fix :: forall a. (Behaviour a -> Behaviour a) -> Behaviour a
 b_fix = primOp1 (\f -> let x = f x in x) "fix"
@@ -140,7 +140,7 @@ instance Eq (BehaviourFun a b) where
 instance Show (BehaviourFun a b) where
         show _ = error "Show instance for behaviours is required for Num, but is meaningless"
 instance Num (Bhv Int) where
-        fromInteger = Prim . BhvConst . fromInteger
+        fromInteger = prim . BhvConst . fromInteger
         (+) = primOp2 (+) "plus"
         (*) = primOp2 (*) "times"
         abs = primOp1 abs "abs"

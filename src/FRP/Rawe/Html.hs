@@ -251,7 +251,7 @@ typeof = fromJSString . typeof'
 --  Talking to server
 
 sget' :: String -> Bhv (Maybe JSValue)
-sget' = Prim . BhvServer "sget" . J.toJSString
+sget' = prim . BhvServer "sget" . J.toJSString
 
 sget :: BJSON a => String -> Bhv (Maybe a)
 sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
@@ -430,4 +430,4 @@ appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
 appendHtml = primOp2 (>>) "append_html"
 
 until :: Bhv (HtmlM a) -> Bhv (Maybe Html) -> Bhv (HtmlM a)
-until x m = Prim $ BhvModifier2 (error "eval: until") "html_until" x m
+until x m = prim $ BhvModifier2 (error "eval: until") "html_until" x m

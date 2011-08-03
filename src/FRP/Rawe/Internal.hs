@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
@@ -205,8 +204,8 @@ addBehaviour b = do
     r <- gets hsRecursion
 
     case b of
-         Prim f -> do
-             (name, params) <- bhvPrim f
+         Prim _ hf -> do
+             (name, params) <- hf
              addBehaviour' nid name params
              return (r,nid)
 
@@ -231,7 +230,7 @@ htmlLocal action = do
 
 -- * Behaviours
 
-data BhvFun a b = forall f. (BhvPrim f a b) => Prim f
+data BhvFun a b = Prim (a -> b) (HtmlM (String, [RawJS]))
                 | Assigned (a -> b) (Int, Int)
                 | (a ~ b) => BhvID
 
@@ -242,7 +241,7 @@ instance Category BhvFun where
     id = BhvID
     BhvID . b = b
     b . BhvID = b
-    g . f = Prim $ BhvModifier2 (>>>) "compose" f g
+    g . f = prim $ BhvModifier2 (>>>) "compose" f g
 
 instance PFunctor (,) BhvFun BhvFun where
     first = firstDefault
@@ -272,15 +271,15 @@ instance Monoidal BhvFun (,) where
 
 instance PreCartesian BhvFun where
     type Product BhvFun = (,)
-    x &&& y = Prim $ BhvModifier2 (&&&) "product" x y
+    x &&& y = prim $ BhvModifier2 (&&&) "product" x y
     fst = primOp fst "fst"
     snd = primOp snd "snd"
 
 instance CCC BhvFun where
     type Exp BhvFun = (->)
     apply = primOp apply "apply"
-    curry = Prim . BhvModifier curry "curry"
-    uncurry = Prim . BhvModifier uncurry "uncurry"
+    curry = prim . BhvModifier curry "curry"
+    uncurry = prim . BhvModifier uncurry "uncurry"
 
 
 class BhvValue a where
@@ -321,6 +320,8 @@ class BhvPrim f a b | f -> a b where
     bhvPrim :: f -> HtmlM (String, [RawJS])
     unsafeBhvEval :: f -> a -> b
 
+prim :: (BhvPrim f a b) => f -> BhvFun a b
+prim f = Prim (unsafeBhvEval f) (bhvPrim f)
 
 
 data BhvPrimFunc a b = BhvPrimFunc (a -> b) String
@@ -351,11 +352,11 @@ instance BhvPrim (BhvConst a b) a b where
 
 
 cb :: (BhvValue a) => a -> BhvFun b a
-cb = Prim . BhvConst
+cb = prim . BhvConst
 
 
 primOp :: (a -> b) -> String -> BhvFun a b
-primOp f = Prim . BhvPrimFunc f
+primOp f = prim . BhvPrimFunc f
 
 primOp0 :: a -> String -> Bhv a
 primOp0 x name = primOp (const x) name
@@ -411,8 +412,8 @@ instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
         , "r_bhv_fun_"++show r++"["++show iid++"] = new rawe.BhvFun();"
         , "rawe.prim.const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
         ]
-    bhvValueFunEval f = \x -> bhvValueFunEval (f (Prim $ BhvConstEval x))
-    cbf = Prim . BhvConstFun
+    bhvValueFunEval f = \x -> bhvValueFunEval (f (prim $ BhvConstEval x))
+    cbf = prim . BhvConstFun
 
 
 data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
@@ -476,7 +477,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
 -- ** Evaluating to Haskell functions
 
 unsafeBfEval :: BhvFun a b -> a -> b
-unsafeBfEval (Prim f) = unsafeBhvEval f
+unsafeBfEval (Prim f _) = f
 unsafeBfEval (Assigned f _) = f
 unsafeBfEval (BhvID) = id
 
@@ -495,7 +496,7 @@ class BhvEval a b | a -> b where
 
 instance BhvValue a => BhvEval (Bhv a) a where
     unsafeEval = flip unsafeBfEval void
-    unsafeUneval = Prim . BhvConstEval
+    unsafeUneval = prim . BhvConstEval
 
 instance (BhvEval a a', BhvEval b b') => BhvEval (a -> b) (a' -> b') where
     unsafeEval f = unsafeEval . f . unsafeUneval
@@ -587,7 +588,7 @@ instance BhvPrim (TimedFold a b) Void a where
     unsafeBhvEval (TimedFold _ def _) = unsafeBfEval def
 
 timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
-timedFold f x = Prim . TimedFold f x
+timedFold f x = prim . TimedFold f x
 
 
 
@@ -607,7 +608,7 @@ instance BhvValue JSString where
 -- ** Misc primitives
 
 bhvWrap :: BhvFun a (Bhv a)
-bhvWrap = primOp (Prim . BhvConstEval) "bhv_wrap"
+bhvWrap = primOp (prim . BhvConstEval) "bhv_wrap"
 
 bhvUnwrap :: BhvFun (Bhv a) a
 bhvUnwrap = primOp (flip unsafeBfEval void) "bhv_unwrap"
