@@ -51,15 +51,31 @@ module FRP.Rawe.Html (
 
     -- ** HTML elements
 
-    a, ae,
-    body, br, button,
-    div_,
-    form, form',
-    head_, html,
-    li,
-    textfield', textfield, title,
-    script, span_, submit, submit',
-    ul,
+    -- | Many HTML elements are provided here, but generation of behaviours or
+    -- events is implemented only for some of them and not in every case where
+    -- that would make sense
+
+    a, ae, abbr, acronym, address, area,
+    b, base, bdo, big, blockquote, body, br, button,
+    caption, center, cite, code, col, colgroup,
+    dd, del, dfn, dir_, div_, dl, dt,
+    em,
+    fieldset, font, form, form', frame, frameset,
+    h1, head_, hr, html,
+    i, iframe, img, input, ins, isindex,
+    kbd,
+    label, legend, li, link,
+    map_, menu, meta, 
+    noframes, noscript,
+    object, ol, optgroup, option,
+    p, param, pre, 
+    q,
+    s, samp, script, select, small, span_, strike, strong, sub, submit, submit', sup,
+    table, tbody, td, textarea, textfield, textfield', tfoot, th, thead, title,
+    tr, tt,
+    u, ul,
+    var,
+    xmp,
 
     -- ** HTML attribuets
 
@@ -336,8 +352,8 @@ htmlGen name tag (HtmlM f) = do
                    in (Assigned (error "eval: htmlGen") bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
                        s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
 
-input :: String -> HtmlM (Bhv a)
-input t = htmlGen ("input_"++t) (\_ -> TagVoid "input" [AttrVal "type" t]) (return ())
+inputGen :: String -> HtmlM (Bhv a)
+inputGen t = htmlGen ("input_"++t) (\_ -> TagVoid "input" [AttrVal "type" t]) (return ())
 
 
 doctype :: Html
@@ -354,6 +370,33 @@ a = container "a"
 ae :: Bhv String -> Html -> HtmlM (Event String)
 ae s = fmap (R.fmap $ const s) . htmlGen "ae" (Tag "a" [AttrVal "href" "#"])
 
+abbr :: Html -> Html
+abbr = container "abbr"
+
+acronym :: Html -> Html
+acronym = container "acronym"
+
+address :: Html -> Html
+address = container "address"
+
+area :: Html
+area = tag "area"
+
+b :: Html -> Html
+b = container "b"
+
+base :: Html
+base = tag "base"
+
+bdo :: Html -> Html
+bdo = container "bdo"
+
+big :: Html -> Html
+big = container "big"
+
+blockquote :: Html -> Html
+blockquote = container "blockquote"
+
 body :: Html -> Html
 body content = container "body" $ do
     content
@@ -363,16 +406,70 @@ br :: Html
 br = tag "br"
 
 button :: HtmlM (Event ())
-button = input "button"
+button = inputGen "button"
+
+caption :: Html -> Html
+caption = container "caption"
+
+center :: Html -> Html
+center = container "center"
+
+cite :: Html -> Html
+cite = container "cite"
+
+code :: Html -> Html
+code = container "code"
+
+col :: Html
+col = tag "col"
+
+colgroup :: Html -> Html
+colgroup = container "colgroup"
+
+dd :: Html -> Html
+dd = container "dd"
+
+del :: Html -> Html
+del = container "del"
+
+dfn :: Html -> Html
+dfn = container "dfn"
+
+dir_ :: Html -> Html
+dir_ = container "dir"
 
 div_ :: Html -> Html
 div_ = container "div"
+
+dl :: Html -> Html
+dl = container "dl"
+
+dt :: Html -> Html
+dt = container "dt"
+
+em :: Html -> Html
+em = container "em"
+
+fieldset :: Html -> Html
+fieldset = container "fieldset"
+
+font :: Html -> Html
+font = container "font"
 
 form :: HtmlM a -> HtmlM (Event [(String, String)])
 form = fmap (R.fmap (fromJSObject . R.fmap fromJSString)) . form'
 
 form' :: HtmlM a -> HtmlM (Event (JSObject JSString))
 form' = htmlGen "form" (Tag "form" [])
+
+frame :: Html
+frame = tag "frame"
+
+frameset :: Html -> Html
+frameset = container "frameset"
+
+h1 :: Html -> Html
+h1 = container "h1"
 
 head_ :: Html -> Html
 head_ content = container "head" $ do
@@ -381,35 +478,171 @@ head_ content = container "head" $ do
     reactivePrim
     content
 
+hr :: Html
+hr = tag "hr"
+
 html :: Html -> Html
 html content = doctype >> container "html" content
+
+i :: Html -> Html
+i = container "i"
+
+iframe :: Html -> Html
+iframe = container "iframe"
+
+img :: Html
+img = tag "img"
+
+input :: Html
+input = tag "input"
+
+ins :: Html -> Html
+ins = container "ins"
+
+isindex :: Html -> Html
+isindex = container "isindex"
+
+kbd :: Html -> Html
+kbd = container "kbd"
+
+label :: Html -> Html
+label = container "label"
+
+legend :: Html -> Html
+legend = container "legend"
 
 li :: Html -> Html
 li = container "li"
 
-textfield' :: HtmlM (Bhv JSString)
-textfield' = input "text"
+link :: Html
+link = tag "link"
 
-textfield :: HtmlM (Bhv String)
-textfield = fmap fromJSString $ textfield'
+map_ :: Html -> Html
+map_ = container "map"
 
-title :: Html -> Html
-title = container "title"
+menu :: Html -> Html
+menu = container "menu"
+
+meta :: Html
+meta = tag "meta"
+
+noframes :: Html -> Html
+noframes = container "noframes"
+
+noscript :: Html -> Html
+noscript = container "noscript"
+
+object :: Html -> Html
+object = container "object"
+
+ol :: Html -> Html
+ol = container "ol"
+
+optgroup :: Html -> Html
+optgroup = container "optgroup"
+
+option :: Html -> Html
+option = container "option"
+
+p :: Html -> Html
+p = container "p"
+
+param :: Html
+param = tag "param"
+
+pre :: Html -> Html
+pre = container "pre"
+
+q :: Html -> Html
+q = container "q"
+
+s :: Html -> Html
+s = container "s"
+
+samp :: Html -> Html
+samp = container "samp"
 
 script :: Html -> Html
 script = container "script"
 
+select :: Html -> Html
+select = container "select"
+
+small :: Html -> Html
+small = container "small"
+
 span_ :: Html -> Html
 span_ = container "span"
+
+strike :: Html -> Html
+strike = container "strike"
+
+strong :: Html -> Html
+strong = container "strong"
+
+sub :: Html -> Html
+sub = container "sub"
+
+-- | Submin is an <input type="submin"> element; generating evens on triggering.
 
 submit :: HtmlM (Event String)
 submit = fmap (R.fmap fromJSString) $ submit'
 
 submit' :: HtmlM (Event JSString)
-submit' = input "submit"
+submit' = inputGen "submit"
+
+sup :: Html -> Html
+sup = container "sup"
+
+table :: Html -> Html
+table = container "table"
+
+tbody :: Html -> Html
+tbody = container "tbody"
+
+td :: Html -> Html
+td = container "td"
+
+textarea :: Html -> Html
+textarea = container "textarea"
+
+-- | Textfild is an <input type="text"> element; generating behaviour of its value
+
+textfield :: HtmlM (Bhv String)
+textfield = fmap fromJSString $ textfield'
+
+textfield' :: HtmlM (Bhv JSString)
+textfield' = inputGen "text"
+
+tfoot :: Html -> Html
+tfoot = container "tfoot"
+
+th :: Html -> Html
+th = container "th"
+
+thead :: Html -> Html
+thead = container "thead"
+
+title :: Html -> Html
+title = container "title"
+
+tr :: Html -> Html
+tr = container "tr"
+
+tt :: Html -> Html
+tt = container "tt"
+
+u :: Html -> Html
+u = container "u"
 
 ul :: Html -> Html
 ul = container "ul"
+
+var :: Html -> Html
+var = container "var"
+
+xmp :: Html -> Html
+xmp = container "xmp"
 
 
 --------------------------------------------------------------------------------
