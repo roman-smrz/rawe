@@ -57,7 +57,7 @@ module FRP.Rawe.Prelude (
     mapM, mapM_, sequence, sequence_, (=<<),
     (&&), (||), not,
     fst, snd, (&&&), curry, uncurry, id, const, (.), flip, ($),
-    asTypeOf, error, undefined,
+    asTypeOf, error, debug, undefined,
 
     -- * List operations
     map, (++), filter, concat, concatMap,
@@ -427,6 +427,9 @@ error'           = primOp1 (P.error . J.fromJSString) "error"
 
 error            :: Bhv String -> Bhv a
 error            = error' . toJSString
+
+debug :: Bhv String -> Bhv a -> Bhv a
+debug = primOp2 (const id) "debug"
 
 -- It is expected that compilers will recognize this and insert error
 -- messages that are more appropriate to the context in which undefined
