@@ -52,10 +52,10 @@ data Attribute = AttrVal String String  -- ^ Key-value pair
 instance BhvValue Attribute where
     bhvValue (AttrVal name value) = do
         (RawJS jn) <- bhvValue name; (RawJS jv) <- bhvValue value
-        return.RawJS $ "cthunk( { AttrVal: ["++jn++","++jv++"] } )"
+        return.RawJS $ "rawe.cthunk( { AttrVal: ["++jn++","++jv++"] } )"
     bhvValue (AttrBool name) = do
         (RawJS jn) <- bhvValue name
-        return.RawJS $ "cthunk( { AttrBool: ["++jn++"] } )"
+        return.RawJS $ "rawe.cthunk( { AttrBool: ["++jn++"] } )"
 
 
 -- | Type class used to enable adding attributes to values of both types
@@ -288,30 +288,30 @@ class BhvValue a where
 
 instance BhvValue (BhvFun a b) where
     bhvValue f = do (r,i) <- addBehaviour f
-                    return $ RawJS $ "cthunk(r_bhv_fun_"++show r++"["++show i++"])"
+                    return $ RawJS $ "rawe.cthunk(r_bhv_fun_"++show r++"["++show i++"])"
 
-instance BhvValue () where bhvValue () = return "cthunk([])"
-instance BhvValue Int where bhvValue x = return.RawJS $ "cthunk("++show x++")"
-instance BhvValue Bool where bhvValue x = return $ if x then "cthunk(true)" else "cthunk(false)"
+instance BhvValue () where bhvValue () = return "rawe.cthunk([])"
+instance BhvValue Int where bhvValue x = return.RawJS $ "rawe.cthunk("++show x++")"
+instance BhvValue Bool where bhvValue x = return $ if x then "rawe.cthunk(true)" else "rawe.cthunk(false)"
 
 instance BhvValue Char where
-    bhvValue x = return.RawJS $ "cthunk("++show x++")"
+    bhvValue x = return.RawJS $ "rawe.cthunk("++show x++")"
 
 instance (BhvValue a, BhvValue b) => BhvValue (a, b) where
     bhvValue (x,y) = do
         (RawJS x') <- bhvValue x; (RawJS y') <- bhvValue y
-        return.RawJS $ "cthunk(["++x'++", "++y'++"])"
+        return.RawJS $ "rawe.cthunk(["++x'++", "++y'++"])"
 
 instance (BhvValue a) => BhvValue (Maybe a) where
     bhvValue (Just x) = do (RawJS jx) <- bhvValue x
-                           return.RawJS $ "cthunk({Just:"++jx++"})"
-    bhvValue Nothing  = return.RawJS $ "cthunk({Nothing:null})"
+                           return.RawJS $ "rawe.cthunk({Just:"++jx++"})"
+    bhvValue Nothing  = return.RawJS $ "rawe.cthunk({Nothing:null})"
 
 instance BhvValue a => BhvValue [a] where
-    bhvValue [] = return.RawJS $ "cthunk({nil:[]})"
+    bhvValue [] = return.RawJS $ "rawe.cthunk({nil:[]})"
     bhvValue (x:xs) = do RawJS jx <- bhvValue x
                          RawJS jxs <- bhvValue xs
-                         return.RawJS $ "cthunk({cons:["++jx++","++jxs++"]})"
+                         return.RawJS $ "rawe.cthunk({cons:["++jx++","++jxs++"]})"
 
 
 
@@ -396,7 +396,7 @@ class BhvValueFun a b | a -> b where
 
 instance BhvValueFun (Bhv a) a where
     bhvValueFun x = do RawJS jx <- bhvValue x
-                       return $ RawJS (jx ++ ".get().compute(cthunk(null))")
+                       return $ RawJS (jx ++ ".get().compute()")
     bhvValueFunEval x = (unsafeBfEval x) void
     cbf = id
 
@@ -408,8 +408,8 @@ instance BhvValueFun Attribute Attribute where
 instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
     bhvValueFun = bhvValueCommon bhvValueFun $ \r iid ->
         [ "var r_bhv_fun_"++show r++" = {};"
-        , "r_bhv_fun_"++show r++"["++show iid++"] = new BhvFun();"
-        , "r_prim_const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
+        , "r_bhv_fun_"++show r++"["++show iid++"] = new rawe.BhvFun();"
+        , "rawe.prim.const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
         ]
     bhvValueFunEval f = \x -> bhvValueFunEval (f (Prim $ BhvConstEval x))
     cbf = Prim . BhvConstFun
@@ -433,11 +433,11 @@ bhvValueCommon bv begin f = htmlLocal $ do
     hgs <- gets $ reverse.hsHtmlGens
 
     return $ RawJS $ init $ unlines $
-        ("cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
+        ("rawe.cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
         map (replicate r '\t' ++) $ (begin r iid ++) $
         concat
         [ flip map bs $ \(id, func, params) ->
-            "r_bhv_fun_"++show r++"["++show id++"] = new BhvFun("++show id++");"
+            "r_bhv_fun_"++show r++"["++show id++"] = new rawe.BhvFun("++show id++");"
 
         , flip map hs $ \(i, h, mi) ->
             "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
@@ -456,7 +456,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
 
         , flip map bs $ \(id, func, params) ->
             let jid = show id
-                jfunc = "r_prim_"++func
+                jfunc = "rawe.prim."++func
                 jparams = concatMap ((',':).unRawJS) params
              in jfunc++".call(r_bhv_fun_"++show r++"["++jid++"]"++jparams++");"
 
@@ -464,7 +464,9 @@ bhvValueCommon bv begin f = htmlLocal $ do
             "r_bhv_fun_"++show r++"["++show i++"].invalidate();"
         ]
         ++
-        [ "return "++result++";" ]
+        [ "rawe.init(r_bhv_fun_"++show r++");"
+        , "return "++result++";"
+        ]
 
 
 
@@ -598,7 +600,7 @@ fromJSString :: Bhv JSString -> Bhv String
 fromJSString = primOp1 J.fromJSString "from_js_string"
 
 instance BhvValue JSString where
-    bhvValue str = return.RawJS $ "cthunk('"++escapeStringJS (J.fromJSString str)++"')"
+    bhvValue str = return.RawJS $ "rawe.cthunk('"++escapeStringJS (J.fromJSString str)++"')"
 
 
 

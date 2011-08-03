@@ -1,10 +1,11 @@
+var prim = rawe.prim;
 
-function r_prim_id() {
+prim.id = function() {
 	this.compute = function(x) { return x; }
 }
 
-function r_prim_apply() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.apply = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
 		var func = params.get()[0].get();
 		var value = params.get()[1];
 		var res = func(value);
@@ -12,37 +13,37 @@ function r_prim_apply() {
 	}); };
 }
 
-function r_prim_curry(f) {
+prim.curry = function(f) {
 	this.add_depend(f.get());
-	this.compute = function(x) { return new Thunk(function() {
-		return function(y) { return f.get().compute(cthunk([x,y])); }
+	this.compute = function(x) { return new rawe.Thunk(function() {
+		return function(y) { return f.get().compute(rawe.cthunk([x,y])); }
 	}); };
 }
 
-function r_prim_uncurry(f) {
+prim.uncurry = function(f) {
 	this.add_depend(f.get());
-	this.compute = function(xy) { return new Thunk(function() {
+	this.compute = function(xy) { return new rawe.Thunk(function() {
 		return f.get().compute(xy.get()[0]).get()(xy.get()[1]).get();
 	}); };
 }
 
-function r_prim_bhv_wrap() {
+prim.bhv_wrap = function() {
 	var bhv = this;
-	this.compute = function(x) { return new Thunk(function() {
-		var res = new BhvFun();
-		r_prim_const.call(res, x);
+	this.compute = function(x) { return new rawe.Thunk(function() {
+		var res = new rawe.BhvFun();
+		prim.const.call(res, x);
 		res.add_depend(bhv);
 		return res;
 	}); };
 }
 
-function r_prim_bhv_unwrap() {
-	this.compute = function(x) { return new Thunk(function() {
-		return x.get().compute(cthunk({})).get();
+prim.bhv_unwrap = function() {
+	this.compute = function(x) { return new rawe.Thunk(function() {
+		return x.get().compute(rawe.cthunk({})).get();
 	}); };
 }
 
-function r_prim_add_attr() {
+prim.add_attr = function() {
         this.compute_ = function(params) {
                 var name, value;
                 var attr = params[1].get();
@@ -58,11 +59,11 @@ function r_prim_add_attr() {
         }
 }
 
-function r_prim_bhv_to_html_inner(out) {
+prim.bhv_to_html_inner = function(out) {
 	var b = this;
 	this.add_depend(out.get());
 
-	this.compute = function(x) { return new Thunk(function() {
+	this.compute = function(x) { return new rawe.Thunk(function() {
 		var inner = out.get().html_inner().get();
 		// TODO: clear old dependency
 		b.add_depend(inner);
@@ -70,14 +71,14 @@ function r_prim_bhv_to_html_inner(out) {
 	}); };
 }
 
-function r_prim_bjoin(out) {
+prim.bjoin = function(out) {
 	this.compute = function(x) {
 		return out.get().compute().get().compute(x);
 	}
 }
 
 // BehaviourFun a b -> BehaviourFun b c -> BehaviourFun a c
-function r_prim_compose(f, g) {
+prim.compose = function(f, g) {
 	this.add_depend(f.get());
 	this.add_depend(g.get());
 
@@ -88,15 +89,15 @@ function r_prim_compose(f, g) {
 }
 
 // a -> BehaviourFun b a
-function r_prim_const(value) {
+prim.const = function(value) {
 	this.compute = function(x) {
 		if (value.get().constructor.name == 'BhvFun')
 			this.add_depend(value.get());
 
-                return new Thunk(function() {
+                return new rawe.Thunk(function() {
                         var vg = value.get();
 			if (vg.constructor.name == 'BhvFun') {
-				bhv = new BhvFun();
+				bhv = new rawe.BhvFun();
                                 bhv.compute = function(x) {
 					return vg.compute(x);
                                 };
@@ -107,155 +108,155 @@ function r_prim_const(value) {
         };
 }
 
-function r_prim_debug() {
+prim.debug = function() {
         this.compute_ = function(x) {
                 alert(x[0].get() + ': ' + x[1].get());
                 return x[1].get();
         };
 }
 
-function r_prim_fix() {
+prim.fix = function() {
 	this.compute = function(x) {
                 var thunk;
-                thunk = new Thunk(function() {
+                thunk = new rawe.Thunk(function() {
 			return x.get()(thunk).get();
                 });
                 return thunk;
         }
 }
 
-function r_prim_eq() {
+prim.eq = function() {
         this.compute_ = function(params) {
                 return params[0].get() == params[1].get();
         };
 }
 
-function r_prim_eq_string() {
+prim.eq_string = function() {
         this.compute_ = function(params) {
                 return params[0].get() == params[1].get();
         };
 }
 
-function r_prim_error() {
+prim.error = function() {
         this.compute_ = function(msg) { alert(msg); };
 }
 
-function r_prim_gen() {
+prim.gen = function() {
         this.compute = function() {
                 return this.value;
         };
 
         this.change = function(value) {
 		this.value = value;
-                r_current_time++;
+                rawe.current_time++;
                 this.invalidate();
         };
 
 	this.gen.prop('rawe_bhv_gen', this);
 }
 
-function r_prim_gen_input_text() {
-	r_prim_gen.call(this);
+prim.gen_input_text = function() {
+	prim.gen.call(this);
 
 	var elem = this.gen;
 	var b = this;
 
-	this.value = cthunk(elem.val());
+	this.value = rawe.cthunk(elem.val());
 
 	elem.change(function(e) {
-		b.change(cthunk(elem.val()));
+		b.change(rawe.cthunk(elem.val()));
 	});
 	elem.keyup(function(e) {
-		b.change(cthunk(elem.val()));
+		b.change(rawe.cthunk(elem.val()));
 	});
 
 	elem.removeAttr('bhv-gen');
 }
 
-function r_prim_gen_input_button() {
-	r_prim_gen.call(this);
+prim.gen_input_button = function() {
+	prim.gen.call(this);
 
 	var b = this;
 	var elem = this.gen;
 
-	b.value = cthunk({ NotYet: [] });
+	b.value = rawe.cthunk({ NotYet: [] });
 	elem.click(function(e) {
-		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk([])] }));
+		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk([])] }));
 	});
 }
 
-function r_prim_gen_input_submit() {
-	r_prim_gen.call(this);
+prim.gen_input_submit = function() {
+	prim.gen.call(this);
 
 	var b = this;
 	var elem = this.gen;
 
-	b.value = cthunk({ NotYet: [] });
+	b.value = rawe.cthunk({ NotYet: [] });
 	elem.click(function(e) {
-		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk(elem.val())] }));
+		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk(elem.val())] }));
 	});
 }
 
-function r_prim_gen_form() {
-	r_prim_gen.call(this);
+prim.gen_form = function() {
+	prim.gen.call(this);
 	var b = this;
 	var elem = this.gen;
 
 	if (typeof b.value == 'undefined')
-		b.value = cthunk({ NotYet: null });
+		b.value = rawe.cthunk({ NotYet: null });
 
 	elem.submit(function(e) {
 		e.preventDefault();
 		var result = {};
 		elem.find('input, select, textarea').each(function() {
-			result[$(this).attr('name')] = cthunk( $(this).val() );
+			result[$(this).attr('name')] = rawe.cthunk( $(this).val() );
 		});
-		b.change(cthunk({ OnTime: [cthunk(++r_current_time), cthunk(result)] }));
+		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk(result)] }));
 	});
 }
 
 
 
-function r_prim_lt_int() {
+prim.lt_int = function() {
         this.compute_ = function(params) {
                 return params[0].get() < params[1].get();
         }
 }
 
-function r_prim_plus() {
+prim.plus = function() {
         this.compute_ = function(x) { return x[0].get()+x[1].get(); }
 }
 
-function r_prim_fst() {
+prim.fst = function() {
 	this.compute_unbox = function(x) { return x.get()[0]; }
 }
 
-function r_prim_snd() {
+prim.snd = function() {
 	this.compute_unbox = function(x) { return x.get()[1]; }
 }
 
-function r_prim_product(f, g) {
+prim.product = function(f, g) {
 	this.add_depend(f.get());
 	this.add_depend(g.get());
-	this.compute = function(x) { return new Thunk(function() {
+	this.compute = function(x) { return new rawe.Thunk(function() {
 		return [f.get().compute(x), g.get().compute(x)];
         }); };
 }
 
-function r_prim_sget(name) {
+prim.sget = function(name) {
         this.values = [];
         var b = this;
 
         this.compute_ = function(x) {
                 for (i in this.values) {
                         if (this.values[i][0] == x) {
-				return { Just: cthunk( this.values[i][1] ) };
+				return { Just: rawe.cthunk( this.values[i][1] ) };
                         }
                 }
 
 		$.get(document.location.href, { q: name.get() }, function(json) {
                         b.values.push([x, jQuery.parseJSON(json)]);
-                        r_current_time++;
+                        rawe.current_time++;
                         b.invalidate();
                 });
 
@@ -263,15 +264,15 @@ function r_prim_sget(name) {
         };
 }
 
-function r_prim_post(name, signal) {
-	var result = cthunk( { NotYet: null } );
+prim.post = function(name, signal) {
+	var result = rawe.cthunk( { NotYet: null } );
 	var last_result = -1;
 	var b = this;
 
 	this.add_depend(signal.get());
 
 	this.invalidate = function() {
-		var x = signal.get().compute(cthunk(null)).get();
+		var x = signal.get().compute().get();
 
 		if (typeof x.OnTime == 'undefined' || x.OnTime[0].get() <= this.last_change)
 			return;
@@ -287,8 +288,8 @@ function r_prim_post(name, signal) {
 				return;
 
 			var y = $.parseJSON(json);
-			result = cthunk( { Just: cthunk(y) } );
-			r_current_time++;
+			result = rawe.cthunk( { Just: rawe.cthunk(y) } );
+			rawe.current_time++;
 			for (i in b.rdepend)
 				b.rdepend[i].invalidate();
 		});
@@ -299,30 +300,30 @@ function r_prim_post(name, signal) {
 	this.compute = function() { return result; };
 }
 
-function r_prim_to_html_int() {
+prim.to_html_int = function() {
         this.compute_ = function(x) {
                 return $('<span>'+x+'</span>');
         };
 }
 
-function r_prim_to_html_jsstring() {
+prim.to_html_jsstring = function() {
 	this.compute_ = function(x) {
 		// TODO: escape the string
 		return $('<span>'+x+'</span>');
 	};
 }
 
-function r_prim_append_html() {
+prim.append_html = function() {
 	this.compute_ = function(params) {
 		return params[0].get().add(params[1].get());
 	};
 }
 
-function r_prim_html_until(def, mb) {
+prim.html_until = function(def, mb) {
 	this.add_depend(def.get());
 	this.add_depend(mb.get());
 
-	this.compute = function() { return new Thunk(function() {
+	this.compute = function() { return new rawe.Thunk(function() {
 		var x = mb.get().compute().get();
 		var y = def.get().compute().get();
 
@@ -340,7 +341,7 @@ function r_prim_html_until(def, mb) {
 	}
 }
 
-function r_prim_typeof() {
+prim.typeof = function() {
 	this.compute_ = function(x) { return typeof x; }
 }
 
@@ -348,8 +349,8 @@ function r_prim_typeof() {
 
 /* JSON interface */
 
-function r_prim_to_js_string() {
-	this.compute = function(cur) { return new Thunk(function() {
+prim.to_js_string = function() {
+	this.compute = function(cur) { return new rawe.Thunk(function() {
 		var result = '';
 		while (typeof cur.get().cons != 'undefined') {
 			result += cur.get().cons[0].get();
@@ -359,8 +360,8 @@ function r_prim_to_js_string() {
 	}); };
 }
 
-function r_prim_from_js_string() {
-	this.compute = function(str) { return new Thunk(function() {
+prim.from_js_string = function() {
+	this.compute = function(str) { return new rawe.Thunk(function() {
 		str = str.get();
 		var end = { nil: [] };
 		var result = end;
@@ -368,15 +369,15 @@ function r_prim_from_js_string() {
 		for (i in str) {
 			newend = { nil: [] };
 			delete end.nil;
-			end.cons = [ cthunk(str[i]), cthunk(newend) ];
+			end.cons = [ rawe.cthunk(str[i]), rawe.cthunk(newend) ];
 			end = newend;
 		}
 		return result;
 	}); };
 }
 
-function r_prim_to_js_object() {
-	this.compute = function(cur) { return new Thunk(function() {
+prim.to_js_object = function() {
+	this.compute = function(cur) { return new rawe.Thunk(function() {
 		var result = {};
 		while (typeof cur.get().cons != 'undefined') {
 			result[cur.get().cons[0].get()[0].get()] =
@@ -387,8 +388,8 @@ function r_prim_to_js_object() {
 	}); };
 }
 
-function r_prim_from_js_object() {
-	this.compute = function(obj) { return new Thunk(function() {
+prim.from_js_object = function() {
+	this.compute = function(obj) { return new rawe.Thunk(function() {
 		obj = obj.get();
 		var end = { nil: [] };
 		var result = end;
@@ -396,15 +397,15 @@ function r_prim_from_js_object() {
 		for (i in obj) {
 			newend = { nil: [] };
 			delete end.nil;
-			end.cons = [ cthunk([cthunk(i), obj[i]]), cthunk(newend) ];
+			end.cons = [ rawe.cthunk([rawe.cthunk(i), obj[i]]), rawe.cthunk(newend) ];
 			end = newend;
 		}
 		return result;
 	}); };
 }
 
-function r_prim_js_object_fmap() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.js_object_fmap = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
 		var f = params.get()[0].get();
 		var obj = params.get()[1].get();
 
@@ -418,15 +419,15 @@ function r_prim_js_object_fmap() {
 
 /* Bool constructors and destructor */
 
-function r_prim_true() {
-        this.compute = function() { return cthunk(true); };
+prim.true = function() {
+        this.compute = function() { return rawe.cthunk(true); };
 }
 
-function r_prim_false() {
-        this.compute = function() { return cthunk(false); };
+prim.false = function() {
+        this.compute = function() { return rawe.cthunk(false); };
 }
 
-function r_prim_bool() {
+prim.bool = function() {
 	this.compute_unbox = function(params) {
                 var t = params.get()[0];
                 var f = params.get()[1].get()[0];
@@ -439,16 +440,16 @@ function r_prim_bool() {
 
 /* List constructors and destructor */
 
-function r_prim_nil() {
-	this.compute = function() { return cthunk( { 'nil': [] }); };
+prim.nil = function() {
+	this.compute = function() { return rawe.cthunk( { 'nil': [] }); };
 }
 
-function r_prim_cons() {
-	this.compute = function(x) { return cthunk( { 'cons': x.get() }); };
+prim.cons = function() {
+	this.compute = function(x) { return rawe.cthunk( { 'cons': x.get() }); };
 }
 
-function r_prim_list() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.list = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
 		var b1 = params.get()[0];
 		var b2 = params.get()[1].get()[0];
 		var x = params.get()[1].get()[1].get();
@@ -463,16 +464,16 @@ function r_prim_list() {
 
 /* Maybe constructors and destructor */
 
-function r_prim_nothing() {
-        this.compute = function() { return cthunk({ Nothing: null }); };
+prim.nothing = function() {
+        this.compute = function() { return rawe.cthunk({ Nothing: null }); };
 }
 
-function r_prim_just() {
-        this.compute = function(x) { return cthunk( { Just: x } ); };
+prim.just = function() {
+        this.compute = function(x) { return rawe.cthunk( { Just: x } ); };
 }
 
-function r_prim_maybe() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.maybe = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
                 var def = params.get()[0];
                 var func = params.get()[1].get()[0];
                 var mb = params.get()[1].get()[1];
@@ -486,18 +487,18 @@ function r_prim_maybe() {
 
 /* Timed constructors and destructor */
 
-function r_prim_not_yet() {
-	this.compute = function() { return cthunk({ NotYet: [] }); };
+prim.not_yet = function() {
+	this.compute = function() { return rawe.cthunk({ NotYet: [] }); };
 }
 
-function r_prim_on_time() {
-	this.compute = function(x) { return new Thunk(function() {
+prim.on_time = function() {
+	this.compute = function(x) { return new rawe.Thunk(function() {
 		return { OnTime: x.get() }
 	}); };
 }
 
-function r_prim_timed() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.timed = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
                 var not_yet = params.get()[0];
                 var on_time = params.get()[1].get()[0];
                 var value = params.get()[1].get()[1];
@@ -510,8 +511,8 @@ function r_prim_timed() {
 	}); };
 }
 
-function r_prim_timed_fold(step, def, ev) {
-	var value = def.get().compute(cthunk([]), {});
+prim.timed_fold = function(step, def, ev) {
+	var value = def.get().compute();
 	var b = this;
 	var last_recomp = 0;
 
@@ -519,7 +520,7 @@ function r_prim_timed_fold(step, def, ev) {
 	ev = ev.get();
 	this.add_depend(ev);
 
-	this.compute = function() { return new Thunk(function() {
+	this.compute = function() { return new rawe.Thunk(function() {
 		if (!b.valid) {
 			var timed = ev.compute().get();
 
@@ -537,16 +538,16 @@ function r_prim_timed_fold(step, def, ev) {
 
 /* Result constructors and destructor */
 
-function r_prim_result_error() {
-	this.compute = function(x) { return cthunk({ Error: [x] }); };
+prim.result_error = function() {
+	this.compute = function(x) { return rawe.cthunk({ Error: [x] }); };
 }
 
-function r_prim_result_ok() {
-	this.compute = function(x) { return cthunk({ Ok: [x] }); };
+prim.result_ok = function() {
+	this.compute = function(x) { return rawe.cthunk({ Ok: [x] }); };
 }
 
-function r_prim_result() {
-	this.compute = function(params) { return new Thunk(function() {
+prim.result = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
 		var value = params.get()[1].get()[1].get();
 		for (i in value) {
 			var func;

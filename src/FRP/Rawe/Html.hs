@@ -149,14 +149,14 @@ instance BhvValue Html where
     bhvValue html = do
         (i, (raw, ())) <- withHtmlCurrent $ renderH html
         modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
-        return.RawJS $ "cthunk(r_html_"++show i++")"
+        return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
 
 instance BhvValue (HtmlM (Bhv a)) where
     bhvValue html = do
         (i, (raw, b)) <- withHtmlCurrent $ renderH html
         (RawJS inner) <- bhvValue b
         modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
-        return.RawJS $ "cthunk(r_html_"++show i++")"
+        return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
 
 
 withHtmlCurrent :: HtmlM a -> HtmlM (Int, a)
@@ -288,9 +288,10 @@ initReactive = do
     hgs <- gets $ reverse . hsHtmlGens
     script ! type_ "text/javascript" $ do
         str $ "$(document).ready(function() {\n"
+        str $ "var r_bhv_fun_0 = {};\n";
 
         forM_ bs $ \(i, func, params) ->
-            str $ "r_bhv_fun_0["++show i++"] = new BhvFun("++show i++");\n"
+            str $ "r_bhv_fun_0["++show i++"] = new rawe.BhvFun("++show i++");\n"
 
         forM_ hs $ \(i, h, mi) ->
             str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
@@ -309,11 +310,11 @@ initReactive = do
 
         forM_ bs $ \(i, func, params) -> do
             let jid = show i
-                jfunc = "r_prim_"++func
+                jfunc = "rawe.prim."++func
                 jparams = concatMap ((',':).unRawJS) params
             str $ jfunc++".call(r_bhv_fun_0["++jid++"]"++jparams++");\n"
 
-        str $ "r_init();\n"
+        str $ "rawe.init(r_bhv_fun_0);\n"
         str $ "});\n";
 
 
