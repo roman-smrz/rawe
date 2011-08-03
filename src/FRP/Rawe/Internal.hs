@@ -350,7 +350,7 @@ instance BhvPrim (BhvModifier2 a b c d e f) e f where
 data BhvConst a b = (BhvValue b) => BhvConst b
 instance BhvPrim (BhvConst a b) a b where
     bhvPrim (BhvConst x) = do jx <- bhvValue x
-                              return ("const", [jx])
+                              return ("cb", [jx])
     unsafeBhvEval (BhvConst x) = const x
 
 
@@ -413,7 +413,7 @@ instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
     bhvValueFun = bhvValueCommon bhvValueFun $ \r iid ->
         [ "var r_bhv_fun_"++show r++" = {};"
         , "r_bhv_fun_"++show r++"["++show iid++"] = new rawe.BhvFun();"
-        , "rawe.prim.const.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
+        , "rawe.prim.cb.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
         ]
     bhvValueFunEval f = \x -> bhvValueFunEval (f (prim $ BhvConstEval x))
     cbf = prim . BhvConstFun
@@ -422,7 +422,7 @@ instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
 data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
 instance BhvPrim (BhvConstFun a b b') a b' where
     bhvPrim (BhvConstFun x) = do jx <- bhvValueFun x
-                                 return ("const", [jx])
+                                 return ("cb", [jx])
     unsafeBhvEval (BhvConstFun x) = const (bhvValueFunEval x)
 
 

@@ -231,7 +231,7 @@ unsafeCoerce :: Bhv a -> Bhv b
 unsafeCoerce = (.) (Assigned (error "eval: unsafeCoerce") (0,0))
 
 typeof' :: Bhv JSValue -> Bhv JSString
-typeof' = primOp1 (error "eval: typeof") "typeof"
+typeof' = primOp1 (error "eval: typeof") "js_typeof"
 
 typeof :: Bhv JSValue -> Bhv String
 typeof = fromJSString . typeof'

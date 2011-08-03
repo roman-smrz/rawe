@@ -114,7 +114,7 @@ prim.uncurry = function(f) {
 
 /* Constant behaviour function */
 
-prim.const = function(value) {
+prim.cb = function(value) {
 	this.compute = function() {
 		if (value.get().constructor.name == 'BhvFun')
 			this.add_depend(value.get());
@@ -136,7 +136,7 @@ prim.bhv_wrap = function() {
 	var bhv = this;
 	this.compute = function(x) { return new rawe.Thunk(function() {
 		var res = new rawe.BhvFun();
-		prim.const.call(res, x);
+		prim.cb.call(res, x);
 		res.add_depend(bhv);
 		return res;
 	}); };
@@ -506,7 +506,7 @@ prim.arit_abs = function() {
 /******************************************************************************/
 //	Other
 
-prim.typeof = function() {
+prim.js_typeof = function() {
 	this.compute_ = function(x) { return typeof x; }
 }
 
@@ -605,11 +605,11 @@ prim.js_object_fmap = function() {
 /******************************************************************************/
 //	Bool
 
-prim.true = function() {
+prim.btrue = function() {
         this.compute = function() { return rawe.cthunk(true); };
 }
 
-prim.false = function() {
+prim.bfalse = function() {
         this.compute = function() { return rawe.cthunk(false); };
 }
 

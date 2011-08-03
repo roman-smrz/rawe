@@ -215,10 +215,10 @@ instance BOrd () where _ <= _ = true
 -- Boolean type
 
 true :: Bhv Bool
-true = primOp0 True "true"
+true = primOp0 True "btrue"
 
 false :: Bhv Bool
-false = primOp0 False "false"
+false = primOp0 False "bfalse"
 
 bool :: Bhv a -> Bhv a -> Bhv Bool -> Bhv a
 bool = primOp3 (\t f b -> if b then t else f) "bool"
