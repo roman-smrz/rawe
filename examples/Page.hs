@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DoRec #-}
 
 -- Page.hs: example pages
 -- as part of rawe - ReActive Web Framework
@@ -119,3 +120,43 @@ page5 = html $ do
 
         -- and then used to choose a page
         bhv $ timed "" (\_ k -> maybe "" id (lookup k pages)) pm
+
+
+{- Example 6 - self-replacing form -}
+
+page6 = html $ do
+    head_ $ do
+        title "Rawe - example 5"
+    body $ do
+            -- send the form only, if it passed the check
+        rec result <- post "register" formData' :: HtmlM (Bhv (Maybe Int))
+            (formData, formData') <- P.fmap (id &&& evguard checkForm) $ bhv $ (
+                -- the form itself
+                cb $ form $ do
+                    textfield ! name "name"
+                    br
+                    textfield ! name "pass" ! type_ "password"
+                    br
+                    textfield ! name "pass-check" ! type_ "password"
+                    br
+                    bhv $ ("Password mismatch"::Bhv Html) `displayUnless`
+                            timed true (const checkForm) formData
+                    br
+                    submit
+                ) `until` (
+                -- once sent replace with saying so
+                fmap (const "Sending ...") $ timed nothing (\_ -> just) formData'
+                ) `until` (
+                -- after the anwer was received, display OK
+                fmap (const "OK") result
+                )
+
+        P.return ()
+
+-- just check if pass and pass-check agree
+checkForm :: Bhv [(String, String)] -> Bhv Bool
+checkForm x = lookup "pass" x == lookup "pass-check" x
+
+-- display the html only if the condition does not hold
+displayUnless :: (ToHtmlBhv a) => Bhv a -> Bhv Bool -> Bhv Html
+displayUnless what = toHtml . bool nothing (just what)

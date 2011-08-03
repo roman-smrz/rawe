@@ -9,6 +9,7 @@
 
 module Main where
 
+import Control.Concurrent
 import Control.Monad
 import Control.Monad.Trans
 
@@ -37,6 +38,9 @@ main = do
                  case name of
                       "sum" -> do a <- look "a"; b <- look "b"
                                   ok $ toResponse $ show $ (read a) + (read b :: Int)
+
+                      "register" -> do liftIO $ threadDelay 1000000
+                                       ok $ toResponse $ "1"
 
             , return . setHTML . toResponse =<< liftIO (render example)
             ]
