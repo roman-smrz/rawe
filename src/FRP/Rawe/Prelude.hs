@@ -79,6 +79,11 @@ module FRP.Rawe.Prelude (
     bjoin,
     fix, BhvFix(..),
 
+    -- ** Events
+    Event,
+    evfold, evmerge, evjoin, evguard, 
+    switcher,
+
 ) where
 
 import qualified Prelude as P
@@ -734,3 +739,48 @@ instance BhvFix (Bhv a) where
 instance (BhvFix b, BhvCurrying (Bhv a -> b) ps (Bhv d)) => BhvFix (Bhv a -> b) where
         bfix f = curryAll $ bhvToHask $ bjoin $ fix
             (cb . haskToBhv . uncurryAll . f . curryAll . bhvToHask . bjoin)
+
+
+
+instance P.Eq Time where _ == _ = True 
+instance P.Ord Time where _ <= _ = True 
+instance BEq Time  where (==) = primOp2 (P.==) "cmp_eq"
+instance BOrd Time  where (<=) = primOp2 (P.<=) "cmp_le"
+
+
+instance BFunctor Timed where
+    fmap f = timed notYet (\t x -> onTime t (f x))
+
+-- | The most general interface to events. Does a left fold over all the values
+-- of given event up to the current time. For example
+--
+-- > evfold (const (+)) (0::Bhv Int) $ fmap (const 1) ev
+--
+-- counts number of occurences of given event (ev)
+
+evfold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Event b -> Bhv a
+evfold = timedFold
+
+-- | Merges two events - occurrences of the resulting event are combinations of
+-- the occurrences of the two parameters; if two events happen at the same
+-- time, the function in the first parameter is used to merge them (since each
+-- occurrence of given even has to have unique time).
+
+evmerge :: (Bhv a -> Bhv a -> Bhv a) -> Event a -> Event a -> Event a
+evmerge f x y = timed y (\tx vx -> timed x (\ty vy -> ordering y (onTime tx (f vx vy)) x (compare tx ty) ) y) x
+
+-- | Joins two layers of events
+
+evjoin :: Event (Event a) -> Event a
+evjoin = bjoin . timed (cb notYet) (const id)
+
+-- | Removes any occurences of an event for which the predicate does not hold.
+
+evguard :: (Bhv a -> Bhv Bool) -> Event a -> Event a
+evguard p = evfold (\t x n -> ite (p n) (onTime t n) x) notYet
+
+-- | 'b `switcher` e' behaves initially like 'b' and changes on each occurrence
+-- of 'e' to the behaviour provided by it.
+
+switcher :: Bhv a -> Event (Bhv a) -> Bhv a
+switcher def = timed def (const bjoin)

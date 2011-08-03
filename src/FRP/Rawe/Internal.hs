@@ -236,6 +236,8 @@ data BhvFun a b = Prim (a -> b) (HtmlM (String, [RawJS]))
 
 type Bhv a = BhvFun Void a
 
+type Event a = Bhv (Timed a)
+
 
 instance Category BhvFun where
     id = BhvID

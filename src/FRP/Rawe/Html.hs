@@ -71,7 +71,6 @@ module FRP.Rawe.Html (
     -- ** Other functions
 
     str,
-    guardTimed, t2m,
     appendHtml,
     until,
 ) where
@@ -174,10 +173,6 @@ instance IsString (Bhv Html) where
     fromString = cb . span_ . fromString
 
 
-instance R.BFunctor Timed where
-    fmap f = timed notYet (\t x -> onTime t (f x))
-
-
 --------------------------------------------------------------------------------
 -- Functions and data types for HTML and JavaScript
 --------------------------------------------------------------------------------
@@ -256,13 +251,13 @@ sget' = prim . BhvServer "sget" . J.toJSString
 sget :: BJSON a => String -> Bhv (Maybe a)
 sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
 
-post' :: String -> Bhv (Timed (JSObject JSString)) -> HtmlM (Bhv (Maybe JSValue))
+post' :: String -> Event (JSObject JSString) -> HtmlM (Bhv (Maybe JSValue))
 post' name signal = do jname <- bhvValue $ J.toJSString name
                        jsignal <- bhvValue signal
                        fmap (Assigned (const Nothing)) $ addBehaviourName "post" [jname, jsignal]
 
 
-post :: (BJSON a) => String -> Bhv (Timed [(String,String)]) -> HtmlM (Bhv (Maybe a))
+post :: (BJSON a) => String -> Event [(String,String)] -> HtmlM (Bhv (Maybe a))
 post name = fmap (R.join . R.fmap (result R.just (const R.nothing) . readJSON)) .
     post' name . R.fmap (toJSObject . R.fmap (R.fmap toJSString))
 
@@ -358,16 +353,16 @@ body content = container "body" $ do
 br :: Html
 br = tag "br"
 
-button :: HtmlM (Bhv (Timed ()))
+button :: HtmlM (Event ())
 button = input "button"
 
 div_ :: Html -> Html
 div_ = container "div"
 
-form :: HtmlM a -> HtmlM (Bhv (Timed [(String, String)]))
+form :: HtmlM a -> HtmlM (Event [(String, String)])
 form = fmap (R.fmap (fromJSObject . R.fmap fromJSString)) . form'
 
-form' :: HtmlM a -> HtmlM (Bhv (Timed (JSObject JSString)))
+form' :: HtmlM a -> HtmlM (Event (JSObject JSString))
 form' = htmlGen "form" (Tag "form" [])
 
 head_ :: Html -> Html
@@ -398,10 +393,10 @@ script = container "script"
 span_ :: Html -> Html
 span_ = container "span"
 
-submit :: HtmlM (Bhv (Timed String))
+submit :: HtmlM (Event String)
 submit = fmap (R.fmap fromJSString) $ submit'
 
-submit' :: HtmlM (Bhv (Timed JSString))
+submit' :: HtmlM (Event JSString)
 submit' = input "submit"
 
 ul :: Html -> Html
@@ -419,12 +414,6 @@ type_ = AttrVal "type"
 value = AttrVal "value"
 
 
-
-guardTimed :: (Bhv a -> Bhv Bool) -> Bhv (Timed a) -> Bhv (Timed a)
-guardTimed f tx = R.ite (timed R.false (const f) tx) tx notYet
-
-t2m :: Bhv (Timed a) -> Bhv (Maybe a)
-t2m = timed R.nothing (const R.just)
 
 appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
 appendHtml = primOp2 (>>) "append_html"
