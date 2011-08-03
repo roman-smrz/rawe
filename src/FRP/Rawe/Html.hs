@@ -53,12 +53,12 @@ module FRP.Rawe.Html (
 
     a,
     body, br, button,
-    div,
+    div_,
     form, form',
     head_, html,
     li,
     textfield', textfield, title,
-    script, span, submit, submit',
+    script, span_, submit, submit',
     ul,
 
     -- ** HTML attribuets
@@ -110,20 +110,20 @@ instance ToHtmlBhv Html where
     toHtml = id
 
 instance ToHtmlBhv Int where
-    toHtml = primOp1 (span.str.show) "to_html_int"
+    toHtml = primOp1 (span_.str.show) "to_html_int"
 
 instance ToHtmlBhv String where
     toHtml = toHtml . toJSString
 
 instance ToHtmlBhv JSString where
-    toHtml = primOp1 (span . str . J.fromJSString) "to_html_jsstring"
+    toHtml = primOp1 (span_ . str . J.fromJSString) "to_html_jsstring"
 
 
 instance ToHtmlBhv [Html] where
-    toHtml = R.foldl appendHtml (cb $ div $ return ())
+    toHtml = R.foldl appendHtml (cb $ div_ $ return ())
 
 instance ToHtmlBhv a => ToHtmlBhv (Maybe a) where
-    toHtml = R.maybe (cb $ div $ return ()) toHtml
+    toHtml = R.maybe (cb $ div_ $ return ()) toHtml
 
 
 --------------------------------------------------------------------------------
@@ -171,7 +171,7 @@ withHtmlCurrent act = do
 
 
 instance IsString (Bhv Html) where
-    fromString = cb . span . fromString
+    fromString = cb . span_ . fromString
 
 
 instance R.BFunctor Timed where
@@ -361,8 +361,8 @@ br = tag "br"
 button :: HtmlM (Bhv (Timed ()))
 button = input "button"
 
-div :: Html -> Html
-div = container "div"
+div_ :: Html -> Html
+div_ = container "div"
 
 form :: HtmlM a -> HtmlM (Bhv (Timed [(String, String)]))
 form = fmap (R.fmap (fromJSObject . R.fmap fromJSString)) . form'
@@ -395,8 +395,8 @@ title = container "title"
 script :: Html -> Html
 script = container "script"
 
-span :: Html -> Html
-span = container "span"
+span_ :: Html -> Html
+span_ = container "span"
 
 submit :: HtmlM (Bhv (Timed String))
 submit = fmap (R.fmap fromJSString) $ submit'

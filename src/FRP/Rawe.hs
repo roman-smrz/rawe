@@ -135,28 +135,6 @@ instance (BhvFix b, BhvCurrying (Behaviour a -> b) ps (Behaviour d)) => BhvFix (
                 where f' = b_uncurryAll . \f1 -> f (b_curryAll f1)
 
 
-instance Eq (BehaviourFun a b) where
-        _ == _ = error "Eq instance for behaviours is required for Num, but is meaningless"
-instance Show (BehaviourFun a b) where
-        show _ = error "Show instance for behaviours is required for Num, but is meaningless"
-instance Num (Bhv Int) where
-        fromInteger = prim . BhvConst . fromInteger
-        (+) = primOp2 (+) "plus"
-        (*) = primOp2 (*) "times"
-        abs = primOp1 abs "abs"
-        signum = primOp1 signum "signum"
-
-{-
-instance Num (BehaviourFun a (Maybe Int)) where
-        fromInteger = Prim . BhvConst . Just . fromInteger
-        (+) = binOp "plus_mb"
-        (*) = binOp "times_mb"
-        abs = unOp "abs_mb"
-        signum = unOp "signum_mb"
-        -}
-
-
-
 
 newBhv :: HtmlM (Behaviour a)
 newBhv = undefined

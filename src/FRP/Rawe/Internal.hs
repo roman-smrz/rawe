@@ -291,6 +291,7 @@ instance BhvValue (BhvFun a b) where
 
 instance BhvValue () where bhvValue () = return "rawe.cthunk([])"
 instance BhvValue Int where bhvValue x = return.RawJS $ "rawe.cthunk("++show x++")"
+instance BhvValue Float where bhvValue x = return.RawJS $ "rawe.cthunk("++show x++")"
 instance BhvValue Bool where bhvValue x = return $ if x then "rawe.cthunk(true)" else "rawe.cthunk(false)"
 
 instance BhvValue Char where

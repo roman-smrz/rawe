@@ -426,11 +426,41 @@ prim.to_html_jsstring = function() {
 
 
 /******************************************************************************/
-//	Logical
+//	Comparing
 
-prim.eq = function() {
+prim.cmp_eq = function() {
         this.compute_ = function(params) {
                 return params[0].get() == params[1].get();
+        };
+}
+
+prim.cmp_ne = function() {
+        this.compute_ = function(params) {
+                return params[0].get() != params[1].get();
+        };
+}
+
+prim.cmp_lt = function() {
+        this.compute_ = function(params) {
+                return params[0].get() < params[1].get();
+        };
+}
+
+prim.cmp_le = function() {
+        this.compute_ = function(params) {
+                return params[0].get() <= params[1].get();
+        };
+}
+
+prim.cmp_gt = function() {
+        this.compute_ = function(params) {
+                return params[0].get() > params[1].get();
+        };
+}
+
+prim.cmp_ge = function() {
+        this.compute_ = function(params) {
+                return params[0].get() >= params[1].get();
         };
 }
 
@@ -438,14 +468,32 @@ prim.eq = function() {
 /******************************************************************************/
 //	Arithmetic
 
-prim.lt_int = function() {
-        this.compute_ = function(params) {
-                return params[0].get() < params[1].get();
-        }
+prim.arit_plus = function() {
+        this.compute_ = function(x) { return x[0].get() + x[1].get(); };
 }
 
-prim.plus = function() {
-        this.compute_ = function(x) { return x[0].get()+x[1].get(); }
+prim.arit_minus = function() {
+        this.compute_ = function(x) { return x[0].get() - x[1].get(); };
+}
+
+prim.arit_times = function() {
+        this.compute_ = function(x) { return x[0].get() * x[1].get(); };
+}
+
+prim.arit_div = function() {
+        this.compute_ = function(x) { return x[0].get() / x[1].get(); };
+}
+
+prim.arit_idiv = function() {
+        this.compute_ = function(x) { return Math.floor(x[0].get() / x[1].get()); };
+}
+
+prim.arit_neg = function() {
+        this.compute_ = function(x) { return -x; };
+}
+
+prim.arit_abs = function() {
+        this.compute_ = function(x) { return Math.abs(x); };
 }
 
 
@@ -567,6 +615,32 @@ prim.bool = function() {
 		if (c.get()) return t;
 		return f;
 	};
+}
+
+/******************************************************************************/
+//	Ordering
+
+prim.lt = function() {
+	this.compute = function() { return rawe.cthunk(-1); };
+}
+
+prim.eq = function() {
+	this.compute = function() { return rawe.cthunk(0); };
+}
+
+prim.gt = function() {
+	this.compute = function() { return rawe.cthunk(1); };
+}
+
+prim.ordering = function() {
+	this.compute = function(params) { return new rawe.Thunk(function() {
+		var value = params.get()[1].get()[1].get()[1].get();
+		switch (value) {
+			case -1: return params.get()[0].get();
+			case  0: return params.get()[1].get()[0].get();
+			case  1: return params.get()[1].get()[1].get()[0].get();
+		}
+	}); };
 }
 
 
