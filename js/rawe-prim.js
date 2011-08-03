@@ -1,6 +1,6 @@
 /*******************************************************************************
  *
- * reactive-prim.js: Implementation of primitive operators
+ * rawe-prim.js: Implementation of primitive operators
  * as part of rawe - ReActive Web Framework
  *
  * Copyright 2011, Roman Smrž <roman.smrz@seznam.cz>

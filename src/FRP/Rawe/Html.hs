@@ -272,10 +272,10 @@ jquery :: Html
 jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
 
 reactive :: Html
-reactive = script ! type_ "text/javascript" ! src "js/reactive.js" $ ""
+reactive = script ! type_ "text/javascript" ! src "js/rawe.js" $ ""
 
 reactivePrim :: Html
-reactivePrim = script ! type_ "text/javascript" ! src "js/reactive-prim.js" $ ""
+reactivePrim = script ! type_ "text/javascript" ! src "js/rawe-prim.js" $ ""
 
 initReactive :: Html
 initReactive = do
