@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.Trans
 
 import Happstack.Server
 
@@ -28,7 +29,7 @@ main = do
                       "sum" -> do a <- look "a"; b <- look "b"
                                   ok $ toResponse $ show $ (read a) + (read b :: Int)
 
-            , return $ setHTML $ toResponse $ render example
+            , return . setHTML . toResponse =<< liftIO (render example)
             ]
 
 

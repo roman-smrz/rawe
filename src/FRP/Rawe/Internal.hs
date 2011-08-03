@@ -512,10 +512,10 @@ instance BhvPrim (BhvConstEval a b) a b where
 -- * Rendering page
 
 
-render :: Html -> String
+render :: Html -> IO String
 render html = let (HtmlM f) = renderH html
                   ((result, ()), _) = f (emptyHtmlState { hsUniq = 1, hsBehaviours = [(0, "id", [])] } )
-               in result
+               in return result
 
 
 renderH :: HtmlM a -> HtmlM (String, a)
