@@ -417,8 +417,11 @@ prim.to_html_int = function() {
 
 prim.to_html_jsstring = function() {
 	this.compute_ = function(x) {
-		// TODO: escape the string
-		return $('<span>'+x+'</span>');
+		return $('<span>'+x
+				.replace(/&/g,"&amp;")
+				.replace(/</g,"&lt;")
+				.replace(/>/g,"&gt;")
+				+'</span>');
 	};
 }
 
