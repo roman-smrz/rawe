@@ -71,9 +71,9 @@ function r_prim_bhv_to_html_inner(out) {
 }
 
 function r_prim_bjoin(out) {
-        this.compute = function(x, env) {
-                return out.get().compute(cthunk([]), env).get().compute(x, env);
-        }
+	this.compute = function(x) {
+		return out.get().compute().get().compute(x);
+	}
 }
 
 // BehaviourFun a b -> BehaviourFun b c -> BehaviourFun a c
@@ -81,15 +81,15 @@ function r_prim_compose(f, g) {
 	this.add_depend(f.get());
 	this.add_depend(g.get());
 
-	this.compute = function(x, env) {
-		var y = f.get().compute(x, env);
-		return g.get().compute(y, env);
+	this.compute = function(x) {
+		var y = f.get().compute(x);
+		return g.get().compute(y);
 	};
 }
 
 // a -> BehaviourFun b a
 function r_prim_const(value) {
-        this.compute = function(x, env) {
+	this.compute = function(x) {
 		if (value.get().constructor.name == 'BhvFun')
 			this.add_depend(value.get());
 
@@ -98,7 +98,7 @@ function r_prim_const(value) {
 			if (vg.constructor.name == 'BhvFun') {
 				bhv = new BhvFun();
                                 bhv.compute = function(x) {
-                                        return vg.compute(x, env);
+					return vg.compute(x);
                                 };
                                 return bhv;
                         }
@@ -115,7 +115,7 @@ function r_prim_debug() {
 }
 
 function r_prim_fix() {
-        this.compute = function(x, env) {
+	this.compute = function(x) {
                 var thunk;
                 thunk = new Thunk(function() {
 			return x.get()(thunk).get();
@@ -216,28 +216,6 @@ function r_prim_gen_form() {
 
 
 
-function r_prim_hask_to_bhv(inner, func) {
-	this.add_depend(func.get());
-        this.compute = function(x, env) {
-                var h2b = env.h2b || {};
-                var nh2b = {};
-                for (i in h2b) nh2b[i] = h2b[i];
-                nh2b[inner.get().id] = x;
-
-                var nenv = {};
-                for (i in env) nenv[i] = env[i];
-                nenv.h2b = nh2b;
-
-                return func.get().compute(cthunk([]), nenv);
-        };
-}
-
-function r_prim_hask_to_bhv_inner() {
-        this.compute = function(x, env) {
-                return env.h2b[this.id];
-        };
-}
-
 function r_prim_lt_int() {
         this.compute_ = function(params) {
                 return params[0].get() < params[1].get();
@@ -246,14 +224,6 @@ function r_prim_lt_int() {
 
 function r_prim_plus() {
         this.compute_ = function(x) { return x[0].get()+x[1].get(); }
-}
-
-function r_prim_plus_mb() {
-        this.compute_ = function(x) {
-                if (typeof x[0].get().Just != 'undefined' && typeof x[1].get().Just != 'undefined')
-                        return { Just: cthunk (x[0].get().Just.get() + x[1].get().Just.get()) };
-                return { Nothing: null };
-        }
 }
 
 function r_prim_fst() {
@@ -267,8 +237,8 @@ function r_prim_snd() {
 function r_prim_product(f, g) {
 	this.add_depend(f.get());
 	this.add_depend(g.get());
-        this.compute = function(x, env) { return new Thunk(function() {
-                return [f.get().compute(x, env), g.get().compute(x, env)];
+	this.compute = function(x) { return new Thunk(function() {
+		return [f.get().compute(x), g.get().compute(x)];
         }); };
 }
 
@@ -375,16 +345,6 @@ function r_prim_typeof() {
 }
 
 
-/* Unsafe functions */
-
-function r_prim_box() {
-	this.compute = function(x) { return cthunk(x); }
-}
-
-function r_prim_unbox() {
-	this.compute = function(x) { return x.get(); }
-}
-
 
 /* JSON interface */
 
@@ -444,7 +404,7 @@ function r_prim_from_js_object() {
 }
 
 function r_prim_js_object_fmap() {
-	this.compute = function(params, env) { return new Thunk(function() {
+	this.compute = function(params) { return new Thunk(function() {
 		var f = params.get()[0].get();
 		var obj = params.get()[1].get();
 
@@ -548,17 +508,6 @@ function r_prim_timed() {
 		var ot = value.get().OnTime;
 		return on_time.get()(ot[0]).get()(ot[1]).get();
 	}); };
-}
-
-function r_prim_timed_map() {
-        this.compute = function(params, env) { return new Thunk(function() {
-                var f = params.get()[0];
-                var x = params.get()[1];
-
-		if (typeof x.get().OnTime != 'undefined')
-			return { OnTime: [ x.get().OnTime[0], f.get().compute(x.get().OnTime[1], env) ] };
-                return x.get();
-        }); };
 }
 
 function r_prim_timed_fold(step, def, ev) {
