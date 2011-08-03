@@ -1,3 +1,12 @@
+-- Main.hs: main example module
+-- as part of rawe - ReActive Web Framework
+--
+-- Copyright 2011 Roman Smrž <roman.smrz@seznam.cz>, see file LICENSE
+
+-- This module contains the main function used to get the examples working.
+-- Here is constructed a simple server using Happstack, which server necessary
+-- JavaScript files and a page chosen from the examples in Page.hs.
+
 module Main where
 
 import Control.Monad
