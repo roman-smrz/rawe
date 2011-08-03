@@ -25,11 +25,11 @@ page1 = html $ do
         title "Rawe - example 1"
     body $ do
         -- texfields give behaviour of their value
-        a <- textfield "a"
+        a <- textfield
         -- which can be displayed ...
         bhv $ toHtml a
         br
-        b <- textfield "b"
+        b <- textfield
         -- ... or counted
         bhv $ toHtml $ length b
 
@@ -59,7 +59,7 @@ page3 = html $ do
 
         -- changing behaviour can be also used as values for the event from
         -- a button:
-        text <- textfield "text"
+        text <- textfield
         addtext <- button ! value "->"
         bhv $ toHtml $ timedFold (const (++)) "" $ fmap (const text) addtext
 
@@ -71,9 +71,9 @@ page4 = html $ do
         title "Rawe - example 4"
     body $ do
         -- generate a form ...
-        req <- form $ do textfield "a"; br
+        req <- form $ do textfield ! name "a"; br
                          str "+"; br
-                         textfield "b"; br
+                         textfield ! name "b"; br
                          submit ! value "="
         -- and send data to a server (and display result)
         sum <- post "sum" req :: HtmlM (Bhv (Maybe Int))
@@ -88,7 +88,7 @@ page4 = html $ do
 pages :: Bhv [(String, Html)]
 pages = cb $
     [ ("text", div_ $ do
-        b <- textfield "b"
+        b <- textfield
         bhv $ toHtml $ length b
         )
     , ("server", div_ $ do

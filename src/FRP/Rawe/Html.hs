@@ -387,11 +387,11 @@ html content = doctype >> container "html" content
 li :: Html -> Html
 li = container "li"
 
-textfield' :: String -> HtmlM (Bhv JSString)
-textfield' n = input "text" ! name n
+textfield' :: HtmlM (Bhv JSString)
+textfield' = input "text"
 
-textfield :: String -> HtmlM (Bhv String)
-textfield = fmap fromJSString . textfield'
+textfield :: HtmlM (Bhv String)
+textfield = fmap fromJSString $ textfield'
 
 title :: Html -> Html
 title = container "title"
