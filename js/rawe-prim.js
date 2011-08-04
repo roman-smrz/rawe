@@ -190,7 +190,7 @@ prim.add_attr = function() {
         }
 }
 
-/* Append to HTML snippets */
+/* Append two HTML snippets */
 
 prim.append_html = function() {
 	this.compute_ = function(params) {

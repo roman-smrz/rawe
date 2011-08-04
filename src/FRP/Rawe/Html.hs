@@ -3,6 +3,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 
+-- Html.hs: combinators for page construction and other HTML-related functions
+-- as part of rawe - ReActive Web Framework
+--
+-- Copyright 2011 Roman Smrž <roman.smrz@seznam.cz>, see file LICENSE
+
+-----------------------------------------------------------------------------
+-- |
+-- Maintainer  : Roman Smrž <roman.smrz@seznam.cz>
+-- Stability   : experimental
+--
+-- This module provides all the available combinators for constructing web
+-- pages. The list of provided elements is rather comprehensive, but we define
+-- only a few attributes, although new ones may be define by the function
+-- 'attr'.
+--
+-- Apart from that, here are to be found also various other HTML-related
+-- function, notably those for converting other behaviour into HTML and
+-- embedding them into a page. Also the functions for communicating with server
+-- are to be found here.
+
+
+
 module FRP.Rawe.Html (
     -- * Data types
     --
@@ -122,6 +144,10 @@ import qualified FRP.Rawe.Prelude as R
 --------------------------------------------------------------------------------
 --   Converting to HTML
 
+-- | 'ToHtmlBhv' class defines those types which can be (in the form of
+-- behaviours) converted to an HTML code. Instances are provided for some
+-- types.
+
 class ToHtmlBhv a where
     toHtml :: Bhv a -> Bhv Html
 
@@ -151,6 +177,11 @@ instance ToHtmlBhv a => ToHtmlBhv (Maybe a) where
 class BehaviourToHtml a where
     bhv :: Bhv (HtmlM a) -> HtmlM a
 
+    -- ^ Embeds a behaviour into the page. It is part of a type class, because
+    -- it is meat to work for two types: plain Html and HtmlM carrying some
+    -- behaviour. For the latter, some mechanism for working with ''inner''
+    -- behaviours is needed, provided by the bhv_to_html_inner prim.
+
 instance BehaviourToHtml () where
     bhv x = do ~(_,id) <- assignBehaviour x
                cur <- gets hsHtmlCurrent
@@ -164,11 +195,20 @@ instance BehaviourToHtml (Bhv a) where
                HtmlM $ \s -> (Assigned (error "eval: bhv inner") nid, ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 
+-- To make behaviours from values of types Html, we render in using the
+-- 'renderH' function (for which we set the ''current'' HTML snippet to be the
+-- one we are creating, using the helper function 'withHtmlCurrent'). We then
+-- add it to the list of snippets it the inner state and return a code for
+-- resulting thunk.
+
 instance BhvValue Html where
     bhvValue html = do
         (i, (raw, ())) <- withHtmlCurrent $ renderH html
         modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
         return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
+
+-- In the case of HtmlM carrying some inner behaviour, we also get the code for
+-- that one and mark it to be set as a property for the created HTML snippet.
 
 instance BhvValue (HtmlM (Bhv a)) where
     bhvValue html = do
@@ -177,6 +217,12 @@ instance BhvValue (HtmlM (Bhv a)) where
         modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
         return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
 
+
+-- Helper function creating  ''local'' state for generating HTML snippet. It
+-- generates a unique ID for the new HTML snippet and then set it to be the
+-- ''current'' one - this is needed for 'bhv' to work and also for
+-- ''generating'' elements. After performing action, resets the value to the
+-- original.
 
 withHtmlCurrent :: HtmlM a -> HtmlM (Int, a)
 withHtmlCurrent act = do
@@ -199,6 +245,10 @@ instance IsString (Bhv Html) where
 
 --------------------------------------------------------------------------------
 --  JavaScript values
+
+-- | 'BJSON' class is similar to 'JSON' from the package json, only difference
+-- being that it works with behaviours. It is used for parsing values received
+-- from server in the case of GET and POST requests for data.
 
 class BJSON a where
     readJSON :: Bhv JSValue -> Bhv (Result a)
@@ -247,14 +297,20 @@ instance R.BFunctor JSObject where
 --------------------------------------------------------------------------------
 --  Other functions
 
+-- | Behaviour-enabled variant of unsafeCoerce
+
 unsafeCoerce :: Bhv a -> Bhv b
 unsafeCoerce = (.) (Assigned (error "eval: unsafeCoerce") (0,0))
 
-typeof' :: Bhv JSValue -> Bhv JSString
-typeof' = primOp1 (error "eval: typeof") "js_typeof"
+-- | Typeof calls the JavaScript typeof keyword and returns the result
 
 typeof :: Bhv JSValue -> Bhv String
 typeof = fromJSString . typeof'
+
+-- | Raw 'JSString' variant of 'typeof'.
+
+typeof' :: Bhv JSValue -> Bhv JSString
+typeof' = primOp1 (error "eval: typeof") "js_typeof"
 
 
 
@@ -265,13 +321,30 @@ typeof = fromJSString . typeof'
 --------------------------------------------------------------------------------
 --  Talking to server
 
+-- | Behaviour 'get ''name''' gets a value from the server for a GET request ?q=name.
+
+sget :: BJSON a => String -> Bhv (Maybe a)
+sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
+
+-- | Raw 'JSValue' version of 'sget'.
+
 sget' :: String -> Bhv (Maybe JSValue)
 sget' name = Prim (const Nothing) $ do
     jname <- bhvValue $ J.toJSString name
     return ("sget", [jname])
 
-sget :: BJSON a => String -> Bhv (Maybe a)
-sget = R.join . R.fmap (result R.just (const R.nothing) . readJSON) . sget'
+-- | This function is registered somewhere to a HtmlM monad and then for each
+-- occurrence of the event sends one POST request to the server. The resulting
+-- behaviour is 'Just' with the value of last received response (or Nothing, if
+-- none arrived yet). The embedding into HtmlM is used in order to guarantee
+-- sending the correct number of requests regardless of evaluating of the
+-- results.
+
+post :: (BJSON a) => String -> Event [(String,String)] -> HtmlM (Bhv (Maybe a))
+post name = fmap (R.join . R.fmap (result R.just (const R.nothing) . readJSON)) .
+    post' name . R.fmap (toJSObject . R.fmap (R.fmap toJSString))
+
+-- | Raw 'JSValue' variant of 'post'
 
 post' :: String -> Event (JSObject JSString) -> HtmlM (Bhv (Maybe JSValue))
 post' name signal = do jname <- bhvValue $ J.toJSString name
@@ -279,52 +352,63 @@ post' name signal = do jname <- bhvValue $ J.toJSString name
                        fmap (Assigned (const Nothing)) $ addBehaviourName "post" [jname, jsignal]
 
 
-post :: (BJSON a) => String -> Event [(String,String)] -> HtmlM (Bhv (Maybe a))
-post name = fmap (R.join . R.fmap (result R.just (const R.nothing) . readJSON)) .
-    post' name . R.fmap (toJSObject . R.fmap (R.fmap toJSString))
-
-
 
 --------------------------------------------------------------------------------
 --  Special values
 
+-- | The script with jQuery source.
+
 jquery :: Html
 jquery = script ! type_ "text/javascript" ! src "js/jquery.js" $ ""
+
+-- | The script with main part of Rawe JavaScript code.
 
 reactive :: Html
 reactive = script ! type_ "text/javascript" ! src "js/rawe.js" $ ""
 
+-- | The script with the JavaScript primitives.
+
 reactivePrim :: Html
 reactivePrim = script ! type_ "text/javascript" ! src "js/rawe-prim.js" $ ""
 
+-- | Code initializing the whole dynamic system
+
 initReactive :: Html
 initReactive = do
+
+    -- Before generating code, we get all the relevart info from the state
     bs <- gets $ reverse . hsBehaviours
     hs <- gets $ reverse . hsHtmlValues
     hbs <- gets $ reverse . hsHtmlBehaviours
     hgs <- gets $ reverse . hsHtmlGens
+
     script ! type_ "text/javascript" $ do
         str $ "$(document).ready(function() {\n"
         str $ "var r_bhv_fun_0 = {};\n";
 
+        -- First we create all the objects
         forM_ bs $ \(i, func, params) ->
             str $ "r_bhv_fun_0["++show i++"] = new rawe.BhvFun("++show i++");\n"
 
+        -- Define HTML snippets, which are dynamically created
         forM_ hs $ \(i, h, mi) ->
             str $ "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
             case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
             ++ ";\n"
 
+        -- Assign to behaviour those HTML snippets for which they are responsible
         forM_ hbs $ \(i, mv) ->
             let var = case mv of Nothing -> "$('body')"
                                  Just v  -> "r_html_"++show v
              in str $ "r_bhv_fun_0["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');\n"
 
+        -- Assign to behaviurs HTML elements, which they use to generate values / events.
         forM_ hgs $ \(i, mv) ->
             let var = case mv of Nothing -> "$('body')"
                                  Just v  -> "r_html_"++show v
              in str $ "r_bhv_fun_0["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');\n"
 
+        -- And finally call all the initialization functions.
         forM_ bs $ \(i, func, params) -> do
             let jid = show i
                 jfunc = "rawe.prim."++func
@@ -339,14 +423,20 @@ initReactive = do
 --------------------------------------------------------------------------------
 --  Html elements
 
+-- | Functin creating non-void elements.
 
 container :: String -> Html -> Html
 container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
                                          in ((), ([Tag tag [] content], s'))
 
+
+-- | Function creating void elements.
+
 tag :: String -> Html
 tag name = HtmlM $ \s -> ((), ([TagVoid name []], s))
 
+
+-- | General initializer of behaviour-generating elements.
 
 htmlGen :: String -> ([HtmlStructure] -> HtmlStructure) -> HtmlM b -> HtmlM (Bhv a)
 htmlGen name tag (HtmlM f) = do
@@ -356,12 +446,19 @@ htmlGen name tag (HtmlM f) = do
                    in (Assigned (error "eval: htmlGen") bid, ([addAttr (AttrVal "bhv-gen" (show i)) (tag content)],
                        s' { hsHtmlGens = (i, cur) : hsHtmlGens s' } ))
 
+-- | Specialization of 'htmlGen' to input elements.
+
 inputGen :: String -> HtmlM (Bhv a)
 inputGen t = htmlGen ("input_"++t) (\_ -> TagVoid "input" [AttrVal "type" t]) (return ())
 
 
+-- | The doctype.
+
 doctype :: Html
 doctype = HtmlM $ \s -> ((), ([Doctype], s))
+
+
+-- Following are all the provided functions for HTML elements:
 
 
 a :: Html -> Html
@@ -587,7 +684,7 @@ strong = container "strong"
 sub :: Html -> Html
 sub = container "sub"
 
--- | Submin is an <input type="submin"> element; generating evens on triggering.
+-- | Submin is an <input type="submit"> element; generating evens on triggering.
 
 submit :: HtmlM (Event String)
 submit = fmap (R.fmap fromJSString) $ submit'
@@ -652,8 +749,13 @@ xmp = container "xmp"
 --------------------------------------------------------------------------------
 --  Html attributes
 
+-- | 'attr ''name'' ''value''' creates an attribute ''name'' with value ''value''.
+
 attr :: String -> String -> Attribute
 attr = AttrVal
+
+
+-- Some predefined attributes:
 
 name :: String -> Attribute
 name = AttrVal "name"
@@ -671,9 +773,19 @@ value :: String -> Attribute
 value = AttrVal "value"
 
 
+--------------------------------------------------------------------------------
+--  Other functions
+
+
+-- | Appends two HTML snippets.
 
 appendHtml :: Bhv Html -> Bhv Html -> Bhv Html
 appendHtml = primOp2 (>>) "append_html"
+
+
+-- | The function 'until' works similarly to '\x -> maybe x id', but keeps the
+-- inner value of the x :: (Bhv HtmlM a) parameter even when the second one
+-- becomes 'Just'.
 
 until :: Bhv (HtmlM a) -> Bhv (Maybe Html) -> Bhv (HtmlM a)
 until x m = prim $ BhvModifier2 (error "eval: until") "html_until" x m
