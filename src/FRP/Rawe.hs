@@ -28,6 +28,9 @@ module FRP.Rawe (
     bhvWrap, bhvUnwrap, haskToBhv, bhvToHask,
     cb,
     render,
+
+    -- * Evaluation to Haskell functions
+    unsafeBfEval, unsafeEval,
 ) where
 
 

@@ -84,6 +84,9 @@ module FRP.Rawe.Prelude (
     evfold, evmerge, evjoin, evguard, 
     switcher,
 
+    -- ** Evaluation to Haskell functions
+    unsafeBfEval, unsafeEval,
+
 ) where
 
 import qualified Prelude as P
