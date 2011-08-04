@@ -68,11 +68,11 @@ prim.product = function(f, g) {
 /* Gettings first and second component of a tuple */
 
 prim.fst = function() {
-	this.compute_unbox = function(x) { return x.get()[0]; }
+	this.compute_t = function(x) { return x.get()[0].get(); }
 }
 
 prim.snd = function() {
-	this.compute_unbox = function(x) { return x.get()[1]; }
+	this.compute_t = function(x) { return x.get()[1].get(); }
 }
 
 
@@ -617,12 +617,12 @@ prim.bfalse = function() {
 }
 
 prim.bool = function() {
-	this.compute_unbox = function(params) {
+	this.compute_t = function(params) {
                 var t = params.get()[0];
                 var f = params.get()[1].get()[0];
                 var c = params.get()[1].get()[1];
-		if (c.get()) return t;
-		return f;
+		if (c.get()) return t.get();
+		return f.get();
 	};
 }
 
