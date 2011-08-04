@@ -11,7 +11,7 @@ Maintainer:          Roman Smrž <roman.smrz@seznam.cz>
 Build-Type:          Simple
 Cabal-Version:       >=1.2
 
-extra-source-files:  examples/Main.hs examples/Page.hs examples/Makefile js/reactive.js js/reactive-prim.js
+extra-source-files:  examples/Main.hs examples/Page.hs examples/Makefile js/rawe.js js/rawe-prim.js
 
 Library
   Build-Depends:     base >= 3 && < 5, mtl, void, categories, json
