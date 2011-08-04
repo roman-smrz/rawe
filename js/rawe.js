@@ -1,6 +1,8 @@
 var rawe = {
+	// run-time representation of time, incremented whenever somthing changes
 	current_time: 0,
 
+	/* objects of this type represent thunks - possibly unevaluated expressions */
 	Thunk: function (thunk) {
 		this.computed = false;
 		this.value = null;
@@ -15,6 +17,7 @@ var rawe = {
 		}
 	},
 
+	/* creates thunk with given (evaluated) value */
 	cthunk: function(x) {
 		thunk = new rawe.Thunk();
 		thunk.value = x;
@@ -23,13 +26,34 @@ var rawe = {
 	},
 
 
+	/* the run-time representation of behaviour functions: */
+
 	BhvFun: function(id) {
+		// ID (unnecessary, used for debugging)
 		this.id = id;
+
+		// list of behaviour functions, on which we depend
 		this.depend = [];
+
+		// list of behaviour functions, which depend on us
 		this.rdepend = [];
+
+		// information for invalidating (prevents multiple invalidatins
+		// and resulting infinite loops)
 		this.valid = false;
 		this.last_change = 0;
 
+
+		/* The compute function is usually provided by individual
+		 * primitives; it gets a thunk with a parameter and returns a
+		 * thunk with a result. It is also possible to implement other
+		 * variants instead:
+		 *
+		 * - compute_t gets thunk, but returns just a value, it is
+		 * 	wrapped in a thunk automatically
+		 *
+		 * - compute_ gets a parameter as a value and returns also value.
+		 */
 		this.compute = function(x) {
 			var b = this;
 			if (b.compute_t) {
@@ -41,10 +65,18 @@ var rawe = {
 			return new rawe.Thunk(function() { return b.compute_(x.get()) });
 		}
 
+		/* Returns the inner object of HTML-valued behaviour. This
+		 * needs to be reimplemented in 'until' so we do not get
+		 * infinite loops in the case of mutual dependencies
+		 */
 		this.html_inner = function(x) {
 			return this.compute(x).get().prop('rawe_html_inner');
 		}
 
+		/* Invalidates the behaviour (if it wasn't already), recomputes
+		 * the HTML, if we have any assigned, and send the signal
+		 * further.
+		 */
 		this.invalidate = function() {
 			if (this.last_change == rawe.current_time)
 				return;
@@ -64,6 +96,7 @@ var rawe = {
 				this.rdepend[i].invalidate();
 		}
 
+		/* Initialization with respect to dependencies */
 		this.init_dep = function() {
 			if (this.valid) return;
 			this.valid = true;
@@ -81,6 +114,7 @@ var rawe = {
 		}
 
 
+		/* Adds a dependency */
 		this.add_depend = function(bhv) {
 			for (var i in this.depend)
 				if (this.depend[i] == bhv)
@@ -89,6 +123,7 @@ var rawe = {
 			bhv.rdepend.push(this);
 		}
 
+		/* Removes a dependency */
 		this.del_depend = function(bhv) {
 			for (var i in this.depend) {
 				if (this.depend[i] == bhv) {
@@ -107,17 +142,19 @@ var rawe = {
 	},
 
 
+	/* Inicialization function */
 	init: function(funs) {
 		for (i in funs)
 			funs[i].init_dep();
 	},
 
+	/* Here will come all the primitives */
 	prim: {}
 }
 
 
 
-
+/* We need a find that also takes into account the top-level elements */
 $.fn.find2 = function(selector) {
 	return this.filter(selector).add(this.find(selector));
 };
