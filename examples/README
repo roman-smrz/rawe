@@ -1,0 +1,10 @@
+Here are several examples of working with the library. They are all
+included in the file Page.hs; in Main.hs is the server part and also
+here can be chosen, which of the exaples is used.
+
+The examples can be built end executed even without installing the
+library itself by using provided Makefile. This needs GHC (tested with
+6.12.3, but any sufficiently recent should work), all the dependencies
+of the library (enumerated in the rawe.cabal file) and also
+happstack-server, which is used to write simple server interacting with
+the examples.

@@ -1,0 +1,24 @@
+rawe: ReActive Web Framework
+
+Here is provided the source code of the library: in the directory src/
+is the Haskell part, in js/ the JavaScript. For convenience, along the
+library-specific JavaScript files is included the jQuery framework,
+which is used for manipulating with DOM elements and to abstract from
+some differences among the web browsers.
+
+The library is structured as a cabal package, so the standard procedure
+for building and installing applies, that is running:
+
+> cabal install
+
+should install the library along with all its dependencies downloaded
+from Hackage.
+
+To generate documentation from the Haskell source, run
+
+> cabal haddock
+
+
+In the directory example/ are some examples; they can be compiled and
+run even without installing this library, but all the other dependencies
+need to be met. For detail see README there.
