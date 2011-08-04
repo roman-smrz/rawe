@@ -183,21 +183,32 @@ str = fromString
 
 -- ** Adding behaviours into HtmlM
 
-addBehaviour' :: Int -> String -> [RawJS] -> HtmlM ()
-addBehaviour' id name params =
+-- | Adds a behaviour to the list of behaviours the state of HtmlM.
+
+addBehaviour
+    :: Int      -- ^ ID used for this behaviour
+    -> String   -- ^ Name of the initialization function
+    -> [RawJS]  -- ^ Parameters for the initialization function
+    -> HtmlM ()
+addBehaviour id name params =
     modify $ \s -> s { hsBehaviours = (id, name, params) : hsBehaviours s }
 
+
+-- | Similar to 'addBehaviour', but generates a unique ID.
 
 addBehaviourName :: String -> [RawJS] -> HtmlM (Int, Int)
 addBehaviourName name params = do
     bid <- htmlUniq
     r <- gets hsRecursion
-    addBehaviour' bid name params
+    addBehaviour bid name params
     return (r,bid)
 
 
-addBehaviour :: BhvFun a b -> HtmlM (Int,Int)
-addBehaviour b = do
+-- | Returns an ID of given behaviour in the current HtmlM monad. It may or may
+-- not add a new one to the global list of behaviours.
+
+assignBehaviour :: BhvFun a b -> HtmlM (Int,Int)
+assignBehaviour b = do
     -- We need to do this so b does not need to be evaluated for internal
     -- unique counter and mfix may work for mutually recursive behaviours.
     nid <- htmlUniq
@@ -206,7 +217,7 @@ addBehaviour b = do
     case b of
          Prim _ hf -> do
              (name, params) <- hf
-             addBehaviour' nid name params
+             addBehaviour nid name params
              return (r,nid)
 
          Assigned _ id -> return id
@@ -288,7 +299,7 @@ class BhvValue a where
     bhvValue :: a -> HtmlM RawJS
 
 instance BhvValue (BhvFun a b) where
-    bhvValue f = do (r,i) <- addBehaviour f
+    bhvValue f = do (r,i) <- assignBehaviour f
                     return $ RawJS $ "rawe.cthunk(r_bhv_fun_"++show r++"["++show i++"])"
 
 instance BhvValue () where bhvValue () = return "rawe.cthunk([])"

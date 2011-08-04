@@ -152,12 +152,12 @@ class BehaviourToHtml a where
     bhv :: Bhv (HtmlM a) -> HtmlM a
 
 instance BehaviourToHtml () where
-    bhv x = do ~(_,id) <- addBehaviour x
+    bhv x = do ~(_,id) <- assignBehaviour x
                cur <- gets hsHtmlCurrent
                HtmlM $ \s -> ((), ([Behaviour id], s { hsHtmlBehaviours = (id, cur) : hsHtmlBehaviours s } ))
 
 instance BehaviourToHtml (Bhv a) where
-    bhv x = do ~(r,id) <- addBehaviour x
+    bhv x = do ~(r,id) <- assignBehaviour x
                cur <- gets hsHtmlCurrent
                jbhv <- bhvValue (Assigned (error "eval: bhv") (r,id) :: Bhv (HtmlM (Bhv a)))
                nid <- addBehaviourName "bhv_to_html_inner" [jbhv]
