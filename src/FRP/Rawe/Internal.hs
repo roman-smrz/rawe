@@ -533,7 +533,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
         concat
 
         -- First we create all the objects
-        [ flip map bs $ \(id, func, params) ->
+        [ flip map bs $ \(id, _, _) ->
             "r_bhv_fun_"++show r++"["++show id++"] = new rawe.BhvFun("++show id++");"
 
         -- Define HTML snippets, which are dynamically created

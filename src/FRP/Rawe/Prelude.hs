@@ -107,7 +107,7 @@ import qualified Control.Category.Cartesian as C
 import Control.Category.Cartesian ((&&&))
 
 import qualified Text.JSON as J
-import Text.JSON (JSValue, JSString)
+import Text.JSON (JSString)
 
 import FRP.Rawe
 import FRP.Rawe.Internal
@@ -392,7 +392,7 @@ instance BFunctor [] where
 instance  BMonad []  where
     m >>= k          = concat (map k m)
     return x         = x ~: nil
-    fail s           = nil
+    fail _           = nil
 
 -- Tuples
 

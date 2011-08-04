@@ -387,7 +387,7 @@ initReactive = do
         str $ "var r_bhv_fun_0 = {};\n";
 
         -- First we create all the objects
-        forM_ bs $ \(i, func, params) ->
+        forM_ bs $ \(i, _, _) ->
             str $ "r_bhv_fun_0["++show i++"] = new rawe.BhvFun("++show i++");\n"
 
         -- Define HTML snippets, which are dynamically created
