@@ -8,6 +8,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE EmptyDataDecls #-}
 
+-- Internal.hs: definition of core types and functions
+-- as part of rawe - ReActive Web Framework
+--
+-- Copyright 2011 Roman Smrž <roman.smrz@seznam.cz>, see file LICENSE
+
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  : Roman Smrž <roman.smrz@seznam.cz>
@@ -15,6 +20,12 @@
 --
 -- In this module are provided all the core definitions of the library. This
 -- interface, however, is considered internal and should not be relied upon.
+--
+-- Various functions defined here are re-exported from other modules: Rawe.hs
+-- for basic types and rendering; Prelude.hs mainly for definitions of
+-- equivalents of standard functions, but also contains various methods
+-- handling events and some utility functions; Html.hs contains mainly
+-- combinators for constructing pages.
 --
 -----------------------------------------------------------------------------
 
@@ -226,9 +237,15 @@ assignBehaviour b = do
 
 -- ** Utility functions
 
+-- | Generates a unique integer.
+
 htmlUniq :: HtmlM Int
 htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
 
+-- | Creates an environment for a "recursive" call used to list functions
+-- between behaviours. Increments the recursion counter, and resets the unique
+-- counter (for somewhat easier debugging is the counter initialized to 1000 *
+-- <recursion level>), then executes given action and restors original state.
 
 htmlLocal :: HtmlM a -> HtmlM a
 htmlLocal action = do
@@ -241,14 +258,30 @@ htmlLocal action = do
 
 -- * Behaviours
 
+-- | The representation of behaviour functions
+
 data BhvFun a b = Prim (a -> b) (HtmlM (String, [RawJS]))
+                -- ^ Primitive function, keeps the function for evaluating and
+                -- an action generating name of parameters of the primitive
+
                 | Assigned (a -> b) (Int, Int)
+                -- ^ Behaviour function assigned in some instance of HtmlM monad,
+                -- keeps function for evaluating and the IDs.
+
                 | (a ~ b) => BhvID
+                -- ^ An identity function.
+
+-- | The type representing behaviours.
 
 type Bhv a = BhvFun Void a
 
+-- | The type representing events.
+
 type Event a = Bhv (Timed a)
 
+
+-- Straightforward instances of various type classes from the package
+-- categories.
 
 instance Category BhvFun where
     id = BhvID
@@ -295,8 +328,16 @@ instance CCC BhvFun where
     uncurry = prim . BhvModifier uncurry "uncurry"
 
 
+-- | 'BhvValue' is the type class representing the types which can be converted
+-- to JavaScript and thus lifted into behaviours.
+
 class BhvValue a where
     bhvValue :: a -> HtmlM RawJS
+    -- ^ The expression is evaluated inside an HtmlM monad to allow
+    -- representing expressing, which depend on the inner state of HtmlM
+
+
+-- Follow instances for basic types:
 
 instance BhvValue (BhvFun a b) where
     bhvValue f = do (r,i) <- assignBehaviour f
@@ -328,7 +369,10 @@ instance BhvValue a => BhvValue [a] where
 
 
 
-
+-- | 'BhvPrim' was originally used in the definition of 'BhvFun' in the
+-- constructor 'Prim' as a type class constraint for an existential type of the
+-- function; for this reason, there are various data structures instantiating
+-- this type class instead of calling the 'Prim' constructor directly.
 
 class BhvPrim f a b | f -> a b where
     bhvPrim :: f -> HtmlM (String, [RawJS])
@@ -338,11 +382,16 @@ prim :: (BhvPrim f a b) => f -> BhvFun a b
 prim f = Prim (unsafeBhvEval f) (bhvPrim f)
 
 
+-- | Behaviour function without any parameter for the initialization function.
+
 data BhvPrimFunc a b = BhvPrimFunc (a -> b) String
 instance BhvPrim (BhvPrimFunc a b) a b where
     bhvPrim (BhvPrimFunc _ name) = return (name, [])
     unsafeBhvEval (BhvPrimFunc f _) = f
 
+
+-- | Behaviour function that modifies another ane that is passed to the
+-- initializator as a parameter.
 
 data BhvModifier a b c d = BhvModifier ((a -> b) -> (c -> d)) String (BhvFun a b)
 instance BhvPrim (BhvModifier a b c d) c d where
@@ -351,6 +400,8 @@ instance BhvPrim (BhvModifier a b c d) c d where
     unsafeBhvEval (BhvModifier f _ b) = f (unsafeBfEval b)
 
 
+-- | Similar to BhvModifier, but has two parameter for the initializaton function.
+
 data BhvModifier2 a b c d e f = BhvModifier2 ((a -> b) -> (c -> d) -> (e -> f)) String (BhvFun a b) (BhvFun c d)
 instance BhvPrim (BhvModifier2 a b c d e f) e f where
     bhvPrim (BhvModifier2 _ name x y) = do jx <- bhvValue x; jy <- bhvValue y
@@ -358,16 +409,21 @@ instance BhvPrim (BhvModifier2 a b c d e f) e f where
     unsafeBhvEval (BhvModifier2 f _ b1 b2) = f (unsafeBfEval b1) (unsafeBfEval b2)
 
 
+-- | Constant behaviour function.
+
 data BhvConst a b = (BhvValue b) => BhvConst b
 instance BhvPrim (BhvConst a b) a b where
     bhvPrim (BhvConst x) = do jx <- bhvValue x
                               return ("cb", [jx])
     unsafeBhvEval (BhvConst x) = const x
 
-
 cb :: (BhvValue a) => a -> BhvFun b a
 cb = prim . BhvConst
 
+
+-- Following are various utility function for constructing primitive operators,
+-- which do not require parameter for their initializaton function. Those are
+-- provided for function of up to five parameters.
 
 primOp :: (a -> b) -> String -> BhvFun a b
 primOp f = prim . BhvPrimFunc f
@@ -397,12 +453,19 @@ primOp5 f name a b c d e = primOp (uncurry $ \x -> uncurry $ \y -> uncurry $ \z 
 
 -- ** Lifting of functions
 
+-- instance of BhvValue for function types
+
 instance (BhvValue b) => BhvValue (Bhv a -> b) where
     bhvValue = bhvValueCommon bhvValue $ \r iid ->
         [ "var r_bhv_fun_"++show r++" = {};"
         , "r_bhv_fun_"++show r++"["++show iid++"] = param.get();"
         ]
 
+
+-- | This class is somewhat similar to the 'BhvValue'; it is used to lift
+-- functions between behaviours to a behaviour of function on values (instead
+-- of behaviour of functions between behaviours as the 'BhvValue' + 'cb'
+-- combination would do) in order to avoid some of the wrapping and unwrapping.
 
 class BhvValueFun a b | a -> b where
     bhvValueFun :: a -> HtmlM RawJS
@@ -437,10 +500,20 @@ instance BhvPrim (BhvConstFun a b b') a b' where
     unsafeBhvEval (BhvConstFun x) = const (bhvValueFunEval x)
 
 
+-- | The actual implementation of lifting function between behaviours.
+
 bhvValueCommon bv begin f = htmlLocal $ do
+    -- First we create a new behaviour
     iid <- htmlUniq
     r <- gets hsRecursion
+
+    -- Which is then passed to the function f, thus giving a value, which we
+    -- can then convert to JavaScript representation
     RawJS result <- bv $ f (Assigned (error "eval: bhvValueCommon") (r,iid))
+
+    -- This forced to evaluate the result of f and added all the necessary
+    -- behaviour function to our local state, so now, we take them and make
+    -- proper JavaScript code from them:
 
     bs <- gets $ reverse.hsBehaviours
     hs <- gets $ reverse.hsHtmlValues
@@ -449,26 +522,39 @@ bhvValueCommon bv begin f = htmlLocal $ do
 
     return $ RawJS $ init $ unlines $
         ("rawe.cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
+
+        -- the begin is implemented in the function, which called us, becase
+        -- the code they need here differs a bit. However, in any case, they
+        -- has to initialize the behaviour we created in the beginning using
+        -- the JavaScript formal parameter in order to make the whole thing
+        -- work.
+
         map (replicate r '\t' ++) $ (begin r iid ++) $
         concat
+
+        -- First we create all the objects
         [ flip map bs $ \(id, func, params) ->
             "r_bhv_fun_"++show r++"["++show id++"] = new rawe.BhvFun("++show id++");"
 
+        -- Define HTML snippets, which are dynamically created
         , flip map hs $ \(i, h, mi) ->
             "var r_html_"++show i++" = $('"++escapeStringJS h++"')" ++
             case mi of { Nothing -> ""; Just inner -> ".prop('rawe_html_inner', "++inner++")" }
             ++ ";"
 
+        -- Assign to behaviour those HTML snippets for which they are responsible
         , flip map hbs $ \(i, mv) ->
             let var = case mv of Nothing -> "$('body')"
                                  Just v  -> "r_html_"++show v
              in "r_bhv_fun_"++show r++"["++show i++"].html = "++var++".find('*[bhv-id="++show i++"]');"
 
+        -- Assign to behaviurs HTML elements, which they use to generate values / events.
         , flip map hgs $ \(i, mv) ->
             let var = case mv of Nothing -> "$('body')"
                                  Just v  -> "r_html_"++show v
              in "r_bhv_fun_"++show r++"["++show i++"].gen = "++var++".find2('*[bhv-gen="++show i++"]');"
 
+        -- And finally call all the initialization functions.
         , flip map bs $ \(id, func, params) ->
             let jid = show id
                 jfunc = "rawe.prim."++func
@@ -490,6 +576,21 @@ bhvValueCommon bv begin f = htmlLocal $ do
 --------------------------------------------------------------------------------
 -- ** Evaluating to Haskell functions
 
+-- | In some situation, it may be desirable to actually execute the code with
+-- behaviours directly in the Haskell program itself. For this purpose, we have
+-- this evaluation function. The behaviour function is executed as if in the
+-- time at the beginning; no events occurred, no input was entered and so on.
+-- The unsafe- prefix is used, because it loses the requirement that the value
+-- of type 'a' is represented in JavaScript and thus, if we generate some
+-- values of type 'Bhv', those may fail, if we try to pass them into the
+-- JavaScript world; the simplest example is the function
+--
+-- > unsafeBfEval bhvWrap :: a -> Bhv a
+--
+-- without the type class constraint on the type 'a' seen in the function 'cb',
+-- so it can not work correctly. Similar issue arises when evaluating
+-- behaviours passed through 'HtmlM'.
+
 unsafeBfEval :: BhvFun a b -> a -> b
 unsafeBfEval (Prim f _) = f
 unsafeBfEval (Assigned f _) = f
@@ -504,7 +605,24 @@ void = error "void"
 
 
 
+-- | nazdar
+
 class BhvEval a b | a -> b where
+
+    -- | This is similar to the 'unsafeBfEval', but since we usually do not work
+    -- directly with behaviour functions, but rather with the more practical
+    -- functions between behaviours, this takes care of more general ''unwrapping''.
+    -- Given definition
+    --
+    -- > length :: Bhv [a] -> Bhv Int
+    -- > length = bfix $ \len -> list 0 (\_ xs -> 1 + len xs)
+    --
+    -- We may use
+    --
+    -- > unsafeEval length "abcd"
+    --
+    -- to get 4 directly in Haskell.
+
     unsafeEval :: a -> b
     unsafeUneval :: b -> a
 
@@ -527,11 +645,18 @@ instance BhvPrim (BhvConstEval a b) a b where
 -- * Rendering page
 
 
+-- | This function renders values of type 'Html' into a string representation.
+-- The IO type is used, because that form may reveal differences between
+-- otherwise semantically equivalent expressions (which are thus treated as
+-- equal) and we do not want to break referential transparency.
+
 render :: Html -> IO String
 render html = let (HtmlM f) = renderH html
                   ((result, ()), _) = f (emptyHtmlState { hsUniq = 1, hsBehaviours = [(0, "id", [])] } )
                in return result
 
+
+-- | Variant of 'render', which evaluates itself in another instance of HtmlM monad.
 
 renderH :: HtmlM a -> HtmlM (String, a)
 renderH (HtmlM f) = do
@@ -553,10 +678,12 @@ renderH (HtmlM f) = do
               mapM_ renderAttrs attrs
               tell ">\n"
 
+          -- we currently do not support other DTDs.
           render' (Doctype) = tell "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n"
 
           render' (Text text) = tell text
 
+          -- for behaviour just generate some placeholder.
           render' (Behaviour id) = do
               tell $ "<div bhv-id="++show id++"></div>\n"
 
@@ -578,7 +705,12 @@ escapeStringHtml = (>>=helper)
 
 -- ** Timed type, constructors, destructor and instances
 
+-- | The type representing time; in Haskell, it is just an empty declaration.
+
 data Time
+
+-- | 'Timed' is used for the definition of events. It is similar to 'Maybe',
+-- but carries additional time information.
 
 data Timed a = NotYet | OnTime Time a
 
@@ -601,6 +733,9 @@ instance BhvPrim (TimedFold a b) Void a where
         return ("timed_fold", [jstep, jdef, jev])
     unsafeBhvEval (TimedFold _ def _) = unsafeBfEval def
 
+-- | timed-folding functions; it is the same as 'evfold'. (Or rather 'evfold'
+-- is the same as this one.)
+
 timedFold :: (Bhv Time -> Bhv a -> Bhv b -> Bhv a) -> Bhv a -> Bhv (Timed b) -> Bhv a
 timedFold f x = prim . TimedFold f x
 
@@ -621,19 +756,30 @@ instance BhvValue JSString where
 
 -- ** Misc primitives
 
+-- | Wraps a value in aditional layer of 'Bhv'.
+
 bhvWrap :: BhvFun a (Bhv a)
 bhvWrap = primOp (prim . BhvConstEval) "bhv_wrap"
+
+-- | Removes a layer of 'Bhv'.
 
 bhvUnwrap :: BhvFun (Bhv a) a
 bhvUnwrap = primOp (flip unsafeBfEval void) "bhv_unwrap"
 
+-- | Turns behaviour function into a function between behaviours. Basically an
+-- inverse of haskToBhv.
+
 bhvToHask :: BhvFun a b -> (Bhv a -> Bhv b)
 bhvToHask = (.)
+
+-- | Turns function between behaviours into a behaviour function. Basically an
+-- inverse of bhvToHask.
 
 haskToBhv :: (Bhv a -> Bhv b) -> BhvFun a b
 haskToBhv f = bhvUnwrap . apply . (cb f &&& bhvWrap)
 
 
+-- | Type denoting raw JavaScript code
 
 newtype RawJS = RawJS { unRawJS :: String }
 instance IsString RawJS where fromString = RawJS
