@@ -88,6 +88,22 @@ var rawe = {
 			this.depend.push(bhv);
 			bhv.rdepend.push(this);
 		}
+
+		this.del_depend = function(bhv) {
+			for (var i in this.depend) {
+				if (this.depend[i] == bhv) {
+					this.depend.splice(i, 1);
+					break;
+				}
+			}
+
+			for (var i in bhv.rdepend) {
+				if (bhv.rdepend[i] == this) {
+					bhv.rdepend.splice(i, 1);
+					break;
+				}
+			}
+		}
 	},
 
 

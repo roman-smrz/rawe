@@ -232,12 +232,16 @@ prim.html_until = function(def, mb) {
 
 prim.bhv_to_html_inner = function(out) {
 	var b = this;
+	var last_inner = null;
 	this.add_depend(out.get());
 
 	this.compute = function(x) { return new rawe.Thunk(function() {
 		var inner = out.get().html_inner().get();
-		// TODO: clear old dependency
-		b.add_depend(inner);
+		if (last_inner != inner) {
+			if (last_inner) b.del_depend(last_inner);
+			b.add_depend(inner);
+			last_inner = inner;
+		}
 		return inner.compute(x).get();
 	}); };
 }
