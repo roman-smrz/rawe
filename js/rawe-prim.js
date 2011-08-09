@@ -707,6 +707,33 @@ prim.maybe = function() {
 
 
 /******************************************************************************/
+//	Either
+
+prim.left = function() {
+	this.compute = function(x) { return rawe.cthunk({ Left: x }); };
+};
+
+prim.right = function() {
+	this.compute = function(x) { return rawe.cthunk({ Right: x }); };
+};
+
+prim.either = function() {
+	this.compute_t = function(params) {
+		var l = params.get()[0];
+		var r = params.get()[1].get()[0];
+		var v = params.get()[1].get()[1].get();
+
+		for (i in v) {
+			switch (i) {
+				case 'Left': return l.get()(v[i]).get();
+				case 'Right': return r.get()(v[i]).get();
+			}
+		}
+	};
+};
+
+
+/******************************************************************************/
 //	Timed
 
 prim.not_yet = function() {

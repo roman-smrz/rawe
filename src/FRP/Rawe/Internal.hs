@@ -367,6 +367,11 @@ instance BhvValue a => BhvValue [a] where
                          RawJS jxs <- bhvValue xs
                          return.RawJS $ "rawe.cthunk({cons:["++jx++","++jxs++"]})"
 
+instance (BhvValue a, BhvValue b) => BhvValue (Either a b) where
+    bhvValue (Left x) = do RawJS jx <- bhvValue x
+                           return.RawJS $ "rawe.cthunk({Left:"++jx++"})"
+    bhvValue (Right x) = do RawJS jx <- bhvValue x
+                            return.RawJS $ "rawe.cthunk({Right:"++jx++"})"
 
 
 -- | 'BhvPrim' was originally used in the definition of 'BhvFun' in the
