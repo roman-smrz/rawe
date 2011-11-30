@@ -139,6 +139,17 @@ var rawe = {
 				}
 			}
 		}
+
+		this.clear_depend = function(bhv) {
+			for (var i in this.depend) {
+				for (var j in this.depend[i].rdepend) {
+					if (this.depend[i].rdepend[j] == this)
+						this.depend[i].rdepend.splice(j, 1);
+				}
+			}
+
+			this.depend = [];
+		};
 	},
 
 

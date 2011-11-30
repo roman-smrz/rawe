@@ -478,8 +478,7 @@ class BhvValueFun a b | a -> b where
     cbf :: a -> Bhv b
 
 instance BhvValueFun (Bhv a) a where
-    bhvValueFun x = do RawJS jx <- bhvValue x
-                       return $ RawJS (jx ++ ".get().compute()")
+    bhvValueFun = bhvValue
     bhvValueFunEval x = (unsafeBfEval x) void
     cbf = id
 
@@ -491,8 +490,7 @@ instance BhvValueFun Attribute Attribute where
 instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
     bhvValueFun = bhvValueCommon bhvValueFun $ \r iid ->
         [ "var r_bhv_fun_"++show r++" = {};"
-        , "r_bhv_fun_"++show r++"["++show iid++"] = new rawe.BhvFun();"
-        , "rawe.prim.cb.call(r_bhv_fun_"++show r++"["++show iid++"], param);"
+        , "r_bhv_fun_"++show r++"["++show iid++"] = param.get();"
         ]
     bhvValueFunEval f = \x -> bhvValueFunEval (f (prim $ BhvConstEval x))
     cbf = prim . BhvConstFun
@@ -501,7 +499,7 @@ instance BhvValueFun b b' => BhvValueFun (Bhv a -> b) (a -> b') where
 data BhvConstFun a b b' = (BhvValueFun b b') => BhvConstFun b
 instance BhvPrim (BhvConstFun a b b') a b' where
     bhvPrim (BhvConstFun x) = do jx <- bhvValueFun x
-                                 return ("cb", [jx])
+                                 return ("cbf", [jx])
     unsafeBhvEval (BhvConstFun x) = const (bhvValueFunEval x)
 
 

@@ -115,18 +115,46 @@ prim.uncurry = function(f) {
 /* Constant behaviour function */
 
 prim.cb = function(value) {
+	this.compute = function() { return value; };
+};
+
+prim.cbf = function(f) {
 	this.compute = function() {
-		if (value.get().constructor.name == 'BhvFun')
-			this.add_depend(value.get());
-		return value;
+		var bhv = this;
+		this.clear_depend();
+
+		// We need to pass all the parameters and keep the dependency
+		// on the final result (the current value of which we then
+		// return)
+		var app = function(cf) { return rawe.cthunk(function(x) {
+			var bx = new rawe.BhvFun();
+			rawe.prim.cb.call(bx, x);
+			var y = cf(rawe.cthunk(bx)).get();
+
+			// still taking another argument
+			if (typeof y == 'function')
+				return app(y);
+
+			// final result
+			bhv.add_depend(y);
+			return y.compute();
+		}); };
+
+		return app(f.get());
 	};
-}
+};
 
 /* Joining two levels of behaviours */
 
 prim.bjoin = function(out) {
 	this.compute = function(x) {
-		return out.get().compute().get().compute(x);
+		var inner = out.get().compute().get();
+
+		this.clear_depend();
+		this.add_depend(out.get());
+		this.add_depend(inner);
+
+		return inner.compute(x);
 	}
 }
 
@@ -137,13 +165,15 @@ prim.bhv_wrap = function() {
 	this.compute = function(x) { return new rawe.Thunk(function() {
 		var res = new rawe.BhvFun();
 		prim.cb.call(res, x);
-		res.add_depend(bhv);
 		return res;
 	}); };
 }
 
 prim.bhv_unwrap = function() {
+	var bhv = this;
+
 	this.compute = function(x) { return new rawe.Thunk(function() {
+		bhv.add_depend(x.get());
 		return x.get().compute().get();
 	}); };
 }
