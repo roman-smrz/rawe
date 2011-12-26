@@ -259,7 +259,7 @@ instance BJSON Int where
     writeJSON = unsafeCoerce
 
 instance R.BEq JSString where
-    (==) = primOp2 (==) "eq"
+    (==) = primOp2 (==) "cmp_eq"
 
 
 --------------------------------------------------------------------------------
