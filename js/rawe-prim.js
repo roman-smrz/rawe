@@ -39,9 +39,6 @@ prim.id = function() {
 /* Composition of functions */
 
 prim.compose = function(f, g) {
-	this.add_depend(f.get());
-	this.add_depend(g.get());
-
 	this.compute = function(x) {
 		var y = f.get().compute(x);
 		return g.get().compute(y);
@@ -58,8 +55,6 @@ prim.compose = function(f, g) {
  * formed from their results */
 
 prim.product = function(f, g) {
-	this.add_depend(f.get());
-	this.add_depend(g.get());
 	this.compute = function(x) { return new rawe.Thunk(function() {
 		return [f.get().compute(x), g.get().compute(x)];
 	}); };
@@ -68,11 +63,11 @@ prim.product = function(f, g) {
 /* Gettings first and second component of a tuple */
 
 prim.fst = function() {
-	this.compute_t = function(x) { return x.get()[0].get(); }
+	this.compute_t = function(x, t) { return x.get()[0].get(t); };
 }
 
 prim.snd = function() {
-	this.compute_t = function(x) { return x.get()[1].get(); }
+	this.compute_t = function(x, t) { return x.get()[1].get(t); };
 }
 
 
@@ -87,24 +82,21 @@ prim.apply = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
 		var func = params.get()[0].get();
 		var value = params.get()[1];
-		var res = func(value);
-		return res.get();
+		return func(value).get(this);
 	}); };
 }
 
 /* Currying and uncurrying primitives */
 
 prim.curry = function(f) {
-	this.add_depend(f.get());
 	this.compute = function(x) { return new rawe.Thunk(function() {
 		return function(y) { return f.get().compute(rawe.cthunk([x,y])); }
 	}); };
 }
 
 prim.uncurry = function(f) {
-	this.add_depend(f.get());
 	this.compute = function(xy) { return new rawe.Thunk(function() {
-		return f.get().compute(xy.get()[0]).get()(xy.get()[1]).get();
+		return f.get().compute(xy.get()[0]).get()(xy.get()[1]).get(this);
 	}); };
 }
 
@@ -121,11 +113,9 @@ prim.cb = function(value) {
 prim.cbf = function(f) {
 	this.compute = function() {
 		var bhv = this;
-		this.clear_depend();
 
-		// We need to pass all the parameters and keep the dependency
-		// on the final result (the current value of which we then
-		// return)
+		// We need to pass all the parameters as behaviours, while we
+		// get them as ordinary values.
 		var app = function(cf) { return rawe.cthunk(function(x) {
 			var bx = new rawe.BhvFun();
 			rawe.prim.cb.call(bx, x);
@@ -136,7 +126,6 @@ prim.cbf = function(f) {
 				return app(y);
 
 			// final result
-			bhv.add_depend(y);
 			return y.compute();
 		}); };
 
@@ -149,12 +138,9 @@ prim.cbf = function(f) {
 prim.bjoin = function(out) {
 	this.compute = function(x) {
 		var inner = out.get().compute().get();
-
-		this.clear_depend();
-		this.add_depend(out.get());
-		this.add_depend(inner);
-
-		return inner.compute(x);
+		var res = inner.compute(x);
+		res.add_depend(out.get());
+		return res;
 	}
 }
 
@@ -173,8 +159,8 @@ prim.bhv_unwrap = function() {
 	var bhv = this;
 
 	this.compute = function(x) { return new rawe.Thunk(function() {
-		bhv.add_depend(x.get());
-		return x.get().compute().get();
+		this.add_depend(x.get());
+		return x.get().compute().get(this);
 	}); };
 }
 
@@ -185,7 +171,7 @@ prim.fix = function() {
 	this.compute = function(f) {
 		var thunk;
 		thunk = new rawe.Thunk(function() {
-			return f.get()(thunk).get();
+			return f.get()(thunk).get(thunk);
 		});
 		return thunk;
 	}
@@ -205,9 +191,9 @@ prim.fix = function() {
  * first parameter) */
 
 prim.add_attr = function() {
-	this.compute_ = function(params) {
+	this.compute_ = function(params, thunk) {
 		var name, value;
-		var attr = params[1].get();
+		var attr = params[1].get(thunk);
 		if (attr.AttrVal) {
 			name = attr.AttrVal[0];
 			value = attr.AttrVal[1];
@@ -216,15 +202,15 @@ prim.add_attr = function() {
 			name = attr.AttrBool[0];
 			value = true;
 		}
-		return params[0].get().attr(name, value);
+		return params[0].get(thunk).attr(name, value);
 	}
 }
 
 /* Append two HTML snippets */
 
 prim.append_html = function() {
-	this.compute_ = function(params) {
-		return params[0].get().add(params[1].get());
+	this.compute_ = function(params, t) {
+		return params[0].get(t).add(params[1].get(t));
 	};
 }
 
@@ -232,23 +218,20 @@ prim.append_html = function() {
  * the x :: (Bhv HtmlM a) parameter even when the second one becomes Just */
 
 prim.html_until = function(def, mb) {
-	this.add_depend(def.get());
-	this.add_depend(mb.get());
-
 	this.compute = function() { return new rawe.Thunk(function() {
-		var x = mb.get().compute().get();
-		var y = def.get().compute().get();
+		var x = mb.get().compute();
+		var y = def.get().compute();
 
-		if (typeof(x.Just) != 'undefined') {
-			xj = x.Just.get();
+		if (typeof(x.get(this).Just) != 'undefined') {
+			var xj = x.get().Just.get(this);
 
 			// we need to copy the property representing the inner
 			// value:
-			xj.prop('rawe_html_inner', y.prop('rawe_html_inner'));
+			xj.prop('rawe_html_inner', y.get().prop('rawe_html_inner'));
 			return xj;
 		}
 		// Nothing -> just return the default
-		return y;
+		return y.get(this);
 	}); };
 
 	// This is needed for mutually dependent values to work
@@ -261,18 +244,10 @@ prim.html_until = function(def, mb) {
  * html_inner() method */
 
 prim.bhv_to_html_inner = function(out) {
-	var b = this;
-	var last_inner = null;
-	this.add_depend(out.get());
-
 	this.compute = function(x) { return new rawe.Thunk(function() {
+		this.add_depend(out.get());
 		var inner = out.get().html_inner().get();
-		if (last_inner != inner) {
-			if (last_inner) b.del_depend(last_inner);
-			b.add_depend(inner);
-			last_inner = inner;
-		}
-		return inner.compute(x).get();
+		return inner.compute(x).get(this);
 	}); };
 }
 
@@ -289,6 +264,7 @@ prim.gen = function() {
 	};
 
 	this.change = function(value) {
+		value.add_depend(this);
 		this.value = value;
 		rawe.current_time++;
 		this.invalidate();
@@ -306,6 +282,7 @@ prim.gen_input_text = function() {
 	var b = this;
 
 	this.value = rawe.cthunk(elem.val());
+	this.value.add_depend(this);
 
 	elem.change(function(e) {
 		b.change(rawe.cthunk(elem.val()));
@@ -326,6 +303,7 @@ prim.gen_input_button = function() {
 	var elem = this.gen;
 
 	b.value = rawe.cthunk({ NotYet: [] });
+	b.value.add_depend(this);
 	elem.click(function(e) {
 		e.preventDefault();
 		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk([])] }));
@@ -339,6 +317,7 @@ prim.gen_input_submit = function() {
 	var elem = this.gen;
 
 	b.value = rawe.cthunk({ NotYet: [] });
+	b.value.add_depend(this);
 	elem.click(function(e) {
 		b.change(rawe.cthunk({ OnTime: [rawe.cthunk(++rawe.current_time), rawe.cthunk(elem.val())] }));
 	});
@@ -353,8 +332,8 @@ prim.gen_form = function() {
 	var b = this;
 	var elem = this.gen;
 
-	if (typeof b.value == 'undefined')
-		b.value = rawe.cthunk({ NotYet: null });
+	b.value = rawe.cthunk({ NotYet: null });
+	b.value.add_depend(this);
 
 	elem.submit(function(e) {
 		e.preventDefault();
@@ -376,7 +355,9 @@ prim.sget = function(name) {
 	name = name.get();
 
 	var b = this;
-	this.compute_t = function() {
+	this.compute_t = function(_, thunk) {
+		thunk.add_depend(this);
+
 		for (i in prim.sget.values) {
 			if (prim.sget.values[i][0] == name) {
 				return { Just: rawe.cthunk( prim.sget.values[i][1] ) };
@@ -402,13 +383,15 @@ prim.sget.values = [];
 
 prim.post = function(name, signal) {
 	var result = rawe.cthunk( { NotYet: null } );
+	result.add_depend(this);
+
 	var last_result = -1;
-	var b = this;
+	var bhv = this;
 
-	this.add_depend(signal.get());
-
+	var parent_invalidate = this.invalidate;
 	this.invalidate = function() {
-		var x = signal.get().compute().get();
+		this.clear_depend();
+		var x = signal.get().compute().get(this);
 
 		// Only react if same event happend and it is a later time than
 		// we already dealt with
@@ -416,7 +399,7 @@ prim.post = function(name, signal) {
 		if (typeof x.OnTime == 'undefined' || x.OnTime[0].get() <= this.last_change)
 			return;
 
-		this.last_change = x.OnTime[0].get();
+		var query_time = x.OnTime[0].get(this);
 
 		var obj = x.OnTime[1].get();
 		var post = {};
@@ -425,14 +408,16 @@ prim.post = function(name, signal) {
 		$.post(document.location.href+'?q='+name.get(), post, function(json) {
 			// if we already got an answer from a later request, we
 			// just ignore this one
-			if (last_result > x.OnTime[0].get())
+			if (last_result > query_time)
 				return;
 
 			var y = $.parseJSON(json);
 			result = rawe.cthunk( { Just: rawe.cthunk(y) } );
+			result.add_depend(bhv);
 			rawe.current_time++;
-			for (i in b.rdepend)
-				b.rdepend[i].invalidate();
+
+			parent_invalidate.call(bhv);
+			this.valid = true;
 		});
 	};
 
@@ -447,14 +432,14 @@ prim.post = function(name, signal) {
 //	Converting to HTML
 
 prim.to_html_int = function() {
-	this.compute_ = function(x) {
-		return $('<span>'+x+'</span>');
+	this.compute_t = function(x,t) {
+		return $('<span>'+x.get(t)+'</span>');
 	};
 }
 
 prim.to_html_jsstring = function() {
-	this.compute_ = function(x) {
-		return $('<span>'+x
+	this.compute_t = function(x,t) {
+		return $('<span>'+x.get(t)
 				.replace(/&/g,"&amp;")
 				.replace(/</g,"&lt;")
 				.replace(/>/g,"&gt;")
@@ -472,38 +457,38 @@ prim.to_html_jsstring = function() {
 //	Comparing
 
 prim.cmp_eq = function() {
-	this.compute_ = function(params) {
-		return params[0].get() == params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) == params[1].get(t);
 	};
 }
 
 prim.cmp_ne = function() {
-	this.compute_ = function(params) {
-		return params[0].get() != params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) != params[1].get(t);
 	};
 }
 
 prim.cmp_lt = function() {
-	this.compute_ = function(params) {
-		return params[0].get() < params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) < params[1].get(t);
 	};
 }
 
 prim.cmp_le = function() {
-	this.compute_ = function(params) {
-		return params[0].get() <= params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) <= params[1].get(t);
 	};
 }
 
 prim.cmp_gt = function() {
-	this.compute_ = function(params) {
-		return params[0].get() > params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) > params[1].get(t);
 	};
 }
 
 prim.cmp_ge = function() {
-	this.compute_ = function(params) {
-		return params[0].get() >= params[1].get();
+	this.compute_ = function(params, t) {
+		return params[0].get(t) >= params[1].get(t);
 	};
 }
 
@@ -512,31 +497,31 @@ prim.cmp_ge = function() {
 //	Arithmetic
 
 prim.arit_plus = function() {
-	this.compute_ = function(x) { return x[0].get() + x[1].get(); };
+	this.compute_ = function(x,t) { return x[0].get(t) + x[1].get(t); };
 }
 
 prim.arit_minus = function() {
-	this.compute_ = function(x) { return x[0].get() - x[1].get(); };
+	this.compute_ = function(x,t) { return x[0].get(t) - x[1].get(t); };
 }
 
 prim.arit_times = function() {
-	this.compute_ = function(x) { return x[0].get() * x[1].get(); };
+	this.compute_ = function(x,t) { return x[0].get(t) * x[1].get(t); };
 }
 
 prim.arit_div = function() {
-	this.compute_ = function(x) { return x[0].get() / x[1].get(); };
+	this.compute_ = function(x,t) { return x[0].get(t) / x[1].get(t); };
 }
 
 prim.arit_idiv = function() {
-	this.compute_ = function(x) { return Math.floor(x[0].get() / x[1].get()); };
+	this.compute_ = function(x,t) { return Math.floor(x[0].get(t) / x[1].get(t)); };
 }
 
 prim.arit_neg = function() {
-	this.compute_ = function(x) { return -x; };
+	this.compute_t = function(x,t) { return -x.get(t); };
 }
 
 prim.arit_abs = function() {
-	this.compute_ = function(x) { return Math.abs(x); };
+	this.compute_ = function(x,t) { return Math.abs(x.get(t)); };
 }
 
 
@@ -544,7 +529,7 @@ prim.arit_abs = function() {
 //	Other
 
 prim.js_typeof = function() {
-	this.compute_ = function(x) { return typeof x; }
+	this.compute_t = function(x,t) { return typeof x.get(t); }
 }
 
 
@@ -561,7 +546,6 @@ prim.error = function() {
 
 
 
-
 /******************************************************************************/
 /*	Constructors and destructors and related functions
 /******************************************************************************/
@@ -575,8 +559,8 @@ prim.error = function() {
 prim.to_js_string = function() {
 	this.compute = function(cur) { return new rawe.Thunk(function() {
 		var result = '';
-		while (typeof cur.get().cons != 'undefined') {
-			result += cur.get().cons[0].get();
+		while (typeof cur.get(this).cons != 'undefined') {
+			result += cur.get().cons[0].get(this);
 			cur = cur.get().cons[1];
 		}
 		return result;
@@ -584,8 +568,9 @@ prim.to_js_string = function() {
 }
 
 prim.from_js_string = function() {
-	this.compute = function(str) { return new rawe.Thunk(function() {
-		str = str.get();
+	var bhv = this;
+	this.compute = function(strt) { return new rawe.Thunk(function() {
+		str = strt.get(this);
 		var end = { nil: [] };
 		var result = end;
 
@@ -593,6 +578,8 @@ prim.from_js_string = function() {
 			newend = { nil: [] };
 			delete end.nil;
 			end.cons = [ rawe.cthunk(str[i]), rawe.cthunk(newend) ];
+			end.cons[0].merge_depend(strt);
+			end.cons[1].merge_depend(strt);
 			end = newend;
 		}
 		return result;
@@ -602,8 +589,8 @@ prim.from_js_string = function() {
 prim.to_js_object = function() {
 	this.compute = function(cur) { return new rawe.Thunk(function() {
 		var result = {};
-		while (typeof cur.get().cons != 'undefined') {
-			result[cur.get().cons[0].get()[0].get()] =
+		while (typeof cur.get(this).cons != 'undefined') {
+			result[cur.get().cons[0].get()[0].get(this)] =
 				cur.get().cons[0].get()[1];
 			cur = cur.get().cons[1];
 		}
@@ -612,15 +599,18 @@ prim.to_js_object = function() {
 }
 
 prim.from_js_object = function() {
-	this.compute = function(obj) { return new rawe.Thunk(function() {
-		obj = obj.get();
+	this.compute = function(objt) { return new rawe.Thunk(function() {
+		obj = objt.get(this);
 		var end = { nil: [] };
 		var result = end;
 
 		for (i in obj) {
 			newend = { nil: [] };
 			delete end.nil;
-			end.cons = [ rawe.cthunk([rawe.cthunk(i), obj[i]]), rawe.cthunk(newend) ];
+			end.cons = [
+				rawe.cthunk([rawe.cthunk(i).merge_depend(objt), obj[i]]),
+				rawe.cthunk(newend).merge_depend(objt)
+			];
 			end = newend;
 		}
 		return result;
@@ -630,7 +620,7 @@ prim.from_js_object = function() {
 prim.js_object_fmap = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
 		var f = params.get()[0].get();
-		var obj = params.get()[1].get();
+		var obj = params.get()[1].get(this);
 
 		var result = {};
 		for (i in obj) result[i] = f(obj[i]);
@@ -651,12 +641,12 @@ prim.bfalse = function() {
 }
 
 prim.bool = function() {
-	this.compute_t = function(params) {
+	this.compute_t = function(params, thunk) {
 		var t = params.get()[0];
 		var f = params.get()[1].get()[0];
 		var c = params.get()[1].get()[1];
-		if (c.get()) return t.get();
-		return f.get();
+		if (c.get(thunk)) return t.get(thunk);
+		return f.get(thunk);
 	};
 }
 
@@ -677,11 +667,11 @@ prim.gt = function() {
 
 prim.ordering = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
-		var value = params.get()[1].get()[1].get()[1].get();
+		var value = params.get()[1].get()[1].get()[1].get(this);
 		switch (value) {
-			case -1: return params.get()[0].get();
-			case  0: return params.get()[1].get()[0].get();
-			case  1: return params.get()[1].get()[1].get()[0].get();
+			case -1: return params.get()[0].get(this);
+			case  0: return params.get()[1].get()[0].get(this);
+			case  1: return params.get()[1].get()[1].get()[0].get(this);
 		}
 	}); };
 }
@@ -702,12 +692,13 @@ prim.list = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
 		var b1 = params.get()[0];
 		var b2 = params.get()[1].get()[0];
-		var x = params.get()[1].get()[1].get();
+		var x = params.get()[1].get()[1].get(this);
 
 		if (typeof x.nil != 'undefined')
-			return b1.get();
+			var res = b1.get(this);
 		if (typeof x.cons != 'undefined')
-			return b2.get()(x.cons[0]).get()(x.cons[1]).get();
+			var res = b2.get()(x.cons[0]).get()(x.cons[1]).get(this);
+		return res;
 	}); };
 }
 
@@ -727,11 +718,11 @@ prim.maybe = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
 		var def = params.get()[0];
 		var func = params.get()[1].get()[0];
-		var mb = params.get()[1].get()[1];
+		var mb = params.get()[1].get()[1].get(this);
 
-		if (typeof mb.get().Just == 'undefined')
-			return def.get();
-		return func.get()(mb.get().Just).get();
+		if (typeof mb.Just == 'undefined')
+			return def.get(this)
+		else return func.get()(mb.Just).get(this);
 	}); };
 }
 
@@ -748,18 +739,21 @@ prim.right = function() {
 };
 
 prim.either = function() {
-	this.compute_t = function(params) {
-		var l = params.get()[0];
-		var r = params.get()[1].get()[0];
-		var v = params.get()[1].get()[1].get();
+	this.compute = function(params) { return new rawe.Thunk(function() {
+		var value = params.get()[1].get()[1].get(this);
+		var res;
+		for (constr in value) {
+			switch (constr) {
+				case 'Left': res = params.get()[0]; break;
+				case 'Right': res = params.get()[1].get()[0]; break;
+			}
 
-		for (i in v) {
-			switch (i) {
-				case 'Left': return l.get()(v[i]).get();
-				case 'Right': return r.get()(v[i]).get();
+			if (res) {
+				res = res.get()(value[constr]);
+				return res.get(this);
 			}
 		}
-	};
+	}); };
 };
 
 
@@ -778,40 +772,44 @@ prim.on_time = function() {
 
 prim.timed = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
-		var not_yet = params.get()[0];
-		var on_time = params.get()[1].get()[0];
-		var value = params.get()[1].get()[1];
+		var value = params.get()[1].get()[1].get(this);
+		var res;
+		for (constr in value) {
+			switch (constr) {
+				case 'NotYet': res = params.get()[0]; break;
+				case 'OnTime': res = params.get()[1].get()[0]; break;
+			}
 
-		if (typeof value.get().OnTime == 'undefined')
-			return not_yet.get();
-
-		var ot = value.get().OnTime;
-		return on_time.get()(ot[0]).get()(ot[1]).get();
+			if (res) {
+				for (i in value[constr])
+					res = res.get()(value[constr][i]);
+				return res.get(this);
+			}
+		}
 	}); };
 }
 
 prim.timed_fold = function(step, def, ev) {
 	var value = def.get().compute();
-	var b = this;
-	var last_recomp = 0;
+	value.add_depend(this);
 
-	step = step.get();
-	ev = ev.get();
-	this.add_depend(ev);
+	this.compute = function() { return value; };
 
-	this.compute = function() { return new rawe.Thunk(function() {
-		if (!b.valid) {
-			var timed = ev.compute().get();
+	var parent_invalidate = this.invalidate;
+	this.invalidate = function() {
+		this.clear_depend();
+		var timed = ev.get().compute().get(this);
 
-			if (timed.OnTime && timed.OnTime[0].get() > last_recomp) {
-				value = step.compute().get()(timed.OnTime[0]).get()(value).get()(timed.OnTime[1]);
-				last_recomp = timed.OnTime[0].get();
-			}
+		if (timed.OnTime)
+			value = step.get().compute().get()(timed.OnTime[0]).get()(value).get()(timed.OnTime[1]);
 
-			b.valid = true;
-		}
-		return value.get();
-	}); };
+		value = rawe.cthunk(value.get());
+		value.add_depend(this);
+
+		parent_invalidate.call(this);
+		this.valid = true;
+	};
+	this.init = this.invalidate;
 }
 
 
@@ -828,14 +826,14 @@ prim.result_ok = function() {
 
 prim.result = function() {
 	this.compute = function(params) { return new rawe.Thunk(function() {
-		var value = params.get()[1].get()[1].get();
+		var value = params.get()[1].get()[1].get(this);
 		for (i in value) {
 			var func;
 			switch (i) {
 				case 'Ok': func = params.get()[0]; break;
 				case 'Error': func = params.get()[1].get()[0]; break;
 			}
-			return func.get()(value[i][0]).get();
+			return func.get()(value[i][0]).get(this);
 		}
 	}); };
 }

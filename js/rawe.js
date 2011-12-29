@@ -7,14 +7,37 @@ var rawe = {
 		this.computed = false;
 		this.value = null;
 		this.thunk = thunk;
+		this.depend = [];
 
-		this.get = function() {
+		this.get = function(transfer_depend) {
 			if (!this.computed) {
-				this.value = this.thunk();
+				this.value = this.thunk.call(this);
 				this.computed = true;
 			}
+			if (transfer_depend)
+				transfer_depend.merge_depend(this);
 			return this.value;
 		}
+
+		this.add_depend = function(dep) {
+			for (i in this.depend)
+				if (this.depend[i] == dep)
+					return;
+
+			this.depend.push(dep);
+			return this;
+		};
+
+		this.merge_depend = function(other) {
+			for (i in other.depend)
+				this.add_depend(other.depend[i]);
+			return this;
+		};
+
+		this.get_depend = function() {
+			this.get();
+			return this.depend;
+		};
 	},
 
 	/* creates thunk with given (evaluated) value */
@@ -56,13 +79,18 @@ var rawe = {
 		 */
 		this.compute = function(x) {
 			var b = this;
+
 			if (b.compute_t) {
-				return new rawe.Thunk(function() {
-					return b.compute_t(x);
+				var thunk = new rawe.Thunk(function() {
+					return b.compute_t(x, thunk);
 				});
+				return thunk;
 			}
 
-			return new rawe.Thunk(function() { return b.compute_(x.get()) });
+			var thunk = new rawe.Thunk(function() {
+				return b.compute_(x.get(), thunk)
+			});
+			return thunk;
 		}
 
 		/* Returns the inner object of HTML-valued behaviour. This
@@ -85,15 +113,18 @@ var rawe = {
 			this.last_change = rawe.current_time;
 
 			if (this.html) {
-				var n = this.compute().get();
+				this.clear_depend();
+				var n = this.compute().get(this);
 				if (this.html != n) {
 					this.html.replaceWith(n);
 					this.html = n;
 				}
 			}
 
-			for (i in this.rdepend)
-				this.rdepend[i].invalidate();
+			// We need to clone the reverse-dependency list,
+			// because it may change while handling invalidations.
+			var rdeps = this.rdepend.slice(0);
+			for (i in rdeps) rdeps[i].invalidate();
 		}
 
 		/* Initialization with respect to dependencies */
@@ -105,7 +136,7 @@ var rawe = {
 				this.depend[i].init_dep();
 
 			if (this.html) {
-				var n = this.compute().get();
+				var n = this.compute().get(this);
 				this.html.replaceWith(n);
 				this.html = n;
 			}
@@ -122,6 +153,12 @@ var rawe = {
 			this.depend.push(bhv);
 			bhv.rdepend.push(this);
 		}
+
+		this.merge_depend = function(other) {
+			for (i in other.depend)
+				this.add_depend(other.depend[i]);
+			return this;
+		};
 
 		/* Removes a dependency */
 		this.del_depend = function(bhv) {
