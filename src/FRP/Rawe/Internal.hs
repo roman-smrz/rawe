@@ -479,7 +479,7 @@ class BhvValueFun a b | a -> b where
 
 instance BhvValueFun (Bhv a) a where
     bhvValueFun = bhvValue
-    bhvValueFunEval x = (unsafeBfEval x) void
+    bhvValueFunEval x = (unsafeBfEval x) novalue
     cbf = id
 
 instance BhvValueFun Attribute Attribute where
@@ -603,8 +603,8 @@ unsafeBfEval (BhvID) = id
 instance BhvValue Void where
     bhvValue _ = return "null"
 
-void :: Void
-void = error "void"
+novalue :: Void
+novalue = error "novalue"
 
 
 
@@ -630,7 +630,7 @@ class BhvEval a b | a -> b where
     unsafeUneval :: b -> a
 
 instance BhvValue a => BhvEval (Bhv a) a where
-    unsafeEval = flip unsafeBfEval void
+    unsafeEval = flip unsafeBfEval novalue
     unsafeUneval = prim . BhvConstEval
 
 instance (BhvEval a a', BhvEval b b') => BhvEval (a -> b) (a' -> b') where
@@ -767,7 +767,7 @@ bhvWrap = primOp (prim . BhvConstEval) "bhv_wrap"
 -- | Removes a layer of 'Bhv'.
 
 bhvUnwrap :: BhvFun (Bhv a) a
-bhvUnwrap = primOp (flip unsafeBfEval void) "bhv_unwrap"
+bhvUnwrap = primOp (flip unsafeBfEval novalue) "bhv_unwrap"
 
 -- | Turns behaviour function into a function between behaviours. Basically an
 -- inverse of haskToBhv.

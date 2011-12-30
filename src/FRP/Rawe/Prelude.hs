@@ -722,7 +722,7 @@ instance (BhvCurrying (Bhv b -> r) ps r') =>
 -- | Somwhat generalized version of joining two layers of Bhv
 
 bjoin :: Bhv (BhvFun a b) -> BhvFun a b
-bjoin = prim . BhvModifier (unsafeBfEval . ($void)) "bjoin"
+bjoin = prim . BhvModifier (unsafeBfEval . ($novalue)) "bjoin"
 
 -- | Fixpoint operator for single behaviour
 
