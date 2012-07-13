@@ -60,7 +60,7 @@ prim.product = function(f, g) {
 	}); };
 }
 
-/* Gettings first and second component of a tuple */
+/* Getting first and second component of a tuple */
 
 prim.fst = function() {
 	this.compute_t = function(x, t) { return x.get()[0].get(t); };
@@ -214,7 +214,7 @@ prim.append_html = function() {
 	};
 }
 
-/* Until works similarily to '\x -> maybe x id', but keeps the inner value of
+/* Until works similarly to '\x -> maybe x id', but keeps the inner value of
  * the x :: (Bhv HtmlM a) parameter even when the second one becomes Just */
 
 prim.html_until = function(def, mb) {
@@ -393,7 +393,7 @@ prim.post = function(name, signal) {
 		this.clear_depend();
 		var x = signal.get().compute().get(this);
 
-		// Only react if same event happend and it is a later time than
+		// Only react if same event happened and it is a later time than
 		// we already dealt with
 
 		if (typeof x.OnTime == 'undefined' || x.OnTime[0].get() <= this.last_change)
@@ -553,7 +553,7 @@ prim.error = function() {
 /******************************************************************************/
 //	JavaScript strings and objects
 
-/* We need to work with ADT representation of linked listes were, hence the
+/* We need to work with ADT representation of linked lists were, hence the
  * traversing in the while loops */
 
 prim.to_js_string = function() {

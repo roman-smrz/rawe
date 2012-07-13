@@ -1,5 +1,5 @@
 var rawe = {
-	// run-time representation of time, incremented whenever somthing changes
+	// run-time representation of time, incremented whenever something changes
 	current_time: 0,
 
 	/* objects of this type represent thunks - possibly unevaluated expressions */
@@ -61,7 +61,7 @@ var rawe = {
 		// list of behaviour functions, which depend on us
 		this.rdepend = [];
 
-		// information for invalidating (prevents multiple invalidatins
+		// information for invalidating (prevents multiple invalidations
 		// and resulting infinite loops)
 		this.valid = false;
 		this.last_change = 0;
@@ -190,7 +190,7 @@ var rawe = {
 	},
 
 
-	/* Inicialization function */
+	/* Initialization function */
 	init: function(funs) {
 		for (i in funs)
 			funs[i].init_dep();

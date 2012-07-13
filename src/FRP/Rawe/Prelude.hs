@@ -27,7 +27,7 @@
 --  * Text-manipulation definitions, including classes Read, Show and functions
 --  lines or words.
 --
---  * Of the numerict types, supported are only Int and Float and we use the
+--  * Of the numeric types, supported are only Int and Float and we use the
 --  Num class to use numeric literals and provide some operators. Other numeric
 --  classes are not provided; div and (/) are defined specifically for Int and
 --  Float, respectively.

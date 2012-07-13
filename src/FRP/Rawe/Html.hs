@@ -29,7 +29,7 @@ module FRP.Rawe.Html (
     -- * Data types
     --
     -- | The ones for representing JavaScript values are taken from the package
-    -- json; those for HTML values and attribuets are ours.
+    -- json; those for HTML values and attributes are ours.
 
     JSString, JSObject, JSValue, Result(..),
     HtmlM, Html, Attribute(..), (!),
@@ -99,7 +99,7 @@ module FRP.Rawe.Html (
     var,
     xmp,
 
-    -- ** HTML attribuets
+    -- ** HTML attributes
 
     -- | Functions for only a few attributes are predefined here currently;
     -- other may be generated using the attr function.
@@ -376,7 +376,7 @@ reactivePrim = script ! type_ "text/javascript" ! src "js/rawe-prim.js" $ ""
 initReactive :: Html
 initReactive = do
 
-    -- Before generating code, we get all the relevart info from the state
+    -- Before generating code, we get all the relevant info from the state
     bs <- gets $ reverse . hsBehaviours
     hs <- gets $ reverse . hsHtmlValues
     hbs <- gets $ reverse . hsHtmlBehaviours
@@ -423,7 +423,7 @@ initReactive = do
 --------------------------------------------------------------------------------
 --  Html elements
 
--- | Functin creating non-void elements.
+-- | Function creating non-void elements.
 
 container :: String -> Html -> Html
 container tag (HtmlM f) = HtmlM $ \s -> let ((), (content, s')) = f s
@@ -684,7 +684,7 @@ strong = container "strong"
 sub :: Html -> Html
 sub = container "sub"
 
--- | Submin is an <input type="submit"> element; generating evens on triggering.
+-- | Submit is an <input type="submit"> element; generating evens on triggering.
 
 submit :: HtmlM (Event String)
 submit = fmap (R.fmap fromJSString) $ submit'
@@ -707,7 +707,7 @@ td = container "td"
 textarea :: Html -> Html
 textarea = container "textarea"
 
--- | Textfild is an <input type="text"> element; generating behaviour of its value
+-- | Textfield is an <input type="text"> element; generating behaviour of its value
 
 textfield :: HtmlM (Bhv String)
 textfield = fmap fromJSString $ textfield'

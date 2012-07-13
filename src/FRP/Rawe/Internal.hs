@@ -54,7 +54,7 @@ import Text.JSON as J
 
 -- * Basic definitions for HTML
 
--- | The type representing atrributes of HTML elements
+-- | The type representing attributes of HTML elements
 data Attribute = AttrVal String String  -- ^ Key-value pair
                | AttrBool String        -- ^ Boolean attribute
 
@@ -185,7 +185,7 @@ instance IsString Html where
     fromString text = HtmlM $ \s -> ((), ([Text text], s))
 
 -- | Function used to include text node into the HTML page. Forces the type
--- Html insted of arbitrary HtmlM a inferred when using overloaded strings
+-- Html instead of arbitrary HtmlM a inferred when using overloaded strings
 -- directly.
 
 str :: String -> Html
@@ -245,7 +245,7 @@ htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
 -- | Creates an environment for a "recursive" call used to list functions
 -- between behaviours. Increments the recursion counter, and resets the unique
 -- counter (for somewhat easier debugging is the counter initialized to 1000 *
--- <recursion level>), then executes given action and restors original state.
+-- <recursion level>), then executes given action and restores original state.
 
 htmlLocal :: HtmlM a -> HtmlM a
 htmlLocal action = do
@@ -395,8 +395,8 @@ instance BhvPrim (BhvPrimFunc a b) a b where
     unsafeBhvEval (BhvPrimFunc f _) = f
 
 
--- | Behaviour function that modifies another ane that is passed to the
--- initializator as a parameter.
+-- | Behaviour function that modifies another and that is passed to the
+-- initializer as a parameter.
 
 data BhvModifier a b c d = BhvModifier ((a -> b) -> (c -> d)) String (BhvFun a b)
 instance BhvPrim (BhvModifier a b c d) c d where
@@ -405,7 +405,7 @@ instance BhvPrim (BhvModifier a b c d) c d where
     unsafeBhvEval (BhvModifier f _ b) = f (unsafeBfEval b)
 
 
--- | Similar to BhvModifier, but has two parameter for the initializaton function.
+-- | Similar to BhvModifier, but has two parameter for the initialization function.
 
 data BhvModifier2 a b c d e f = BhvModifier2 ((a -> b) -> (c -> d) -> (e -> f)) String (BhvFun a b) (BhvFun c d)
 instance BhvPrim (BhvModifier2 a b c d e f) e f where
@@ -427,7 +427,7 @@ cb = prim . BhvConst
 
 
 -- Following are various utility function for constructing primitive operators,
--- which do not require parameter for their initializaton function. Those are
+-- which do not require parameter for their initialization function. Those are
 -- provided for function of up to five parameters.
 
 primOp :: (a -> b) -> String -> BhvFun a b
@@ -526,7 +526,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
     return $ RawJS $ init $ unlines $
         ("rawe.cthunk(function(param) {":) $ (++[replicate (r-1) '\t' ++ "})"]) $
 
-        -- the begin is implemented in the function, which called us, becase
+        -- the begin is implemented in the function, which called us, because
         -- the code they need here differs a bit. However, in any case, they
         -- has to initialize the behaviour we created in the beginning using
         -- the JavaScript formal parameter in order to make the whole thing
@@ -607,8 +607,6 @@ novalue :: Void
 novalue = error "novalue"
 
 
-
--- | nazdar
 
 class BhvEval a b | a -> b where
 
@@ -759,7 +757,7 @@ instance BhvValue JSString where
 
 -- ** Misc primitives
 
--- | Wraps a value in aditional layer of 'Bhv'.
+-- | Wraps a value in additional layer of 'Bhv'.
 
 bhvWrap :: BhvFun a (Bhv a)
 bhvWrap = primOp (prim . BhvConstEval) "bhv_wrap"
