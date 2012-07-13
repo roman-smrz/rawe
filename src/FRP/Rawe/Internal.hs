@@ -34,6 +34,7 @@ module FRP.Rawe.Internal where
 
 import Prelude hiding (head,div,(.),id,fst,snd,span,curry,uncurry)
 
+import Control.Applicative
 import Control.Categorical.Bifunctor
 import Control.Category
 import Control.Category.Associative
@@ -159,6 +160,10 @@ type Html = HtmlM ()
 
 instance Functor HtmlM where
     fmap f (HtmlM hf) = HtmlM $ \s -> (\(x, hs)->(f x, hs)) (hf s)
+
+instance Applicative HtmlM where
+    pure = return
+    (<*>) = ap
 
 instance Monad HtmlM where
     return x = HtmlM $ \s -> (x, ([], s))
