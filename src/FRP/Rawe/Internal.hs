@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- Internal.hs: definition of core types and functions
 -- as part of rawe - ReActive Web Framework
@@ -236,9 +237,19 @@ assignBehaviour b = do
              addBehaviour nid name params
              return (r,nid)
 
+         Composed _ _ -> do
+             js <- composedList b
+             addBehaviour nid "compose" js
+             return (r,nid)
+
          Assigned _ id -> return id
          BhvID -> return (0,0)
 
+
+
+composedList :: BhvFun a b -> HtmlM [RawJS]
+composedList (Composed x y) = (++) <$> composedList x <*> composedList y
+composedList x = (:[]) <$> bhvValue x
 
 -- ** Utility functions
 
@@ -273,6 +284,10 @@ data BhvFun a b = Prim (a -> b) (HtmlM (String, [RawJS]))
                 -- ^ Behaviour function assigned in some instance of HtmlM monad,
                 -- keeps function for evaluating and the IDs.
 
+                | forall c. Composed (BhvFun a c) (BhvFun c b)
+                -- ^ Composition of two behaviour functions; multiple compositions
+                -- are flattened when generating JavaScript code.
+
                 | (a ~ b) => BhvID
                 -- ^ An identity function.
 
@@ -292,7 +307,7 @@ instance Category BhvFun where
     id = BhvID
     BhvID . b = b
     b . BhvID = b
-    g . f = prim $ BhvModifier2 (>>>) "compose" f g
+    g . f = Composed f g
 
 instance PFunctor (,) BhvFun BhvFun where
     first = firstDefault
@@ -602,6 +617,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
 unsafeBfEval :: BhvFun a b -> a -> b
 unsafeBfEval (Prim f _) = f
 unsafeBfEval (Assigned f _) = f
+unsafeBfEval (Composed f g) = unsafeBfEval g . unsafeBfEval f
 unsafeBfEval (BhvID) = id
 
 

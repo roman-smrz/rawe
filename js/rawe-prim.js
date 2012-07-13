@@ -38,12 +38,15 @@ prim.id = function() {
 
 /* Composition of functions */
 
-prim.compose = function(f, g) {
+prim.compose = function() {
+	var args = arguments;
 	this.compute = function(x) {
-		var y = f.get().compute(x);
-		return g.get().compute(y);
-	};
-}
+		for (var i = 0; i < args.length; i++)
+			x = args[i].get().compute(x);
+		return x;
+ 	};
+};
+ 
 
 
 
