@@ -48,6 +48,7 @@ import Control.Monad.Fix
 import Control.Monad.State
 import Control.Monad.Writer hiding (Product)
 
+import Data.List
 import Data.String
 import Data.Void
 
@@ -145,9 +146,12 @@ data HtmlState = HtmlState
 
     , hsRecursion :: Int
         -- ^ Level of recursion in executing HtmlM monads.
+
+    , hsInFix :: Bool
+        -- ^ Indicates whether we are inside an mfix call
     }
 
-emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0
+emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0 False
 
 
 -- | The HtmlM monad.
@@ -175,8 +179,8 @@ instance Monad HtmlM where
 
 instance MonadFix HtmlM where
     mfix f = HtmlM $ \s -> let (HtmlM f') = f x
-                               (x, s') = f' s
-                            in (x, s')
+                               (x, (t, s')) = f' ( s { hsInFix = True } )
+                            in (x, (t, s' { hsInFix = False } ))
 
 instance MonadState HtmlState HtmlM where
     get = HtmlM $ \s -> (s, ([], s))
@@ -231,16 +235,24 @@ assignBehaviour b = do
     nid <- htmlUniq
     r <- gets hsRecursion
 
+    let checkExisting name params = do
+            inFix <- gets hsInFix
+            if inFix
+               then do addBehaviour nid name params
+                       return (r,nid)
+
+               else do mbid <- return . find (\(_, n, p) -> (n,p)==(name,params)) =<< gets hsBehaviours
+                       case mbid of
+                            Just (id, _, _) -> return (r,id)
+                            Nothing -> do addBehaviour nid name params
+                                          return (r,nid)
+
     case b of
          Prim _ hf -> do
              (name, params) <- hf
-             addBehaviour nid name params
-             return (r,nid)
+             checkExisting name params
 
-         Composed _ _ -> do
-             js <- composedList b
-             addBehaviour nid "compose" js
-             return (r,nid)
+         Composed _ _ -> checkExisting "compose" =<< composedList b
 
          Assigned _ id -> return id
          BhvID -> return (0,0)
@@ -266,7 +278,7 @@ htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
 htmlLocal :: HtmlM a -> HtmlM a
 htmlLocal action = do
     state <- get
-    put $ emptyHtmlState { hsRecursion = hsRecursion state + 1, hsUniq = (hsRecursion state + 1) * 1000 }
+    put $ emptyHtmlState { hsRecursion = hsRecursion state + 1, hsUniq = (hsRecursion state + 1) * 1000, hsInFix = hsInFix state }
     result <- action
     put state
     return result
@@ -804,6 +816,7 @@ haskToBhv f = bhvUnwrap . apply . (cb f &&& bhvWrap)
 -- | Type denoting raw JavaScript code
 
 newtype RawJS = RawJS { unRawJS :: String }
+    deriving Eq
 instance IsString RawJS where fromString = RawJS
 
 escapeStringJS = (>>=helper)
