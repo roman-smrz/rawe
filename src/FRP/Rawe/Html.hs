@@ -125,6 +125,7 @@ import Control.Category.Cartesian
 
 import Control.Monad.State
 
+import qualified Data.IntMap as IM
 import Data.String
 
 import Text.JSON (JSString, JSObject, JSValue, Result(..))
@@ -204,7 +205,11 @@ instance BehaviourToHtml (Bhv a) where
 instance BhvValue Html where
     bhvValue html = do
         (i, (raw, ())) <- withHtmlCurrent $ renderH html
-        modify $ \s -> s { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s }
+        r <- gets hsRecursion
+        modify $ \s -> s
+            { hsHtmlValues = (i, raw, Nothing) : hsHtmlValues s
+            , hsRecNedded = max r (hsRecNedded s)
+            }
         return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
 
 -- In the case of HtmlM carrying some inner behaviour, we also get the code for
@@ -214,7 +219,11 @@ instance BhvValue (HtmlM (Bhv a)) where
     bhvValue html = do
         (i, (raw, b)) <- withHtmlCurrent $ renderH html
         (RawJS inner) <- bhvValue b
-        modify $ \s -> s { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s }
+        r <- gets hsRecursion
+        modify $ \s -> s
+            { hsHtmlValues = (i, raw, Just inner) : hsHtmlValues s
+            , hsRecNedded = max r (hsRecNedded s)
+            }
         return.RawJS $ "rawe.cthunk(r_html_"++show i++")"
 
 
@@ -377,7 +386,7 @@ initReactive :: Html
 initReactive = do
 
     -- Before generating code, we get all the relevant info from the state
-    bs <- gets $ reverse . hsBehaviours
+    bs <- gets $ reverse . (IM.!0) . hsBehaviours
     hs <- gets $ reverse . hsHtmlValues
     hbs <- gets $ reverse . hsHtmlBehaviours
     hgs <- gets $ reverse . hsHtmlGens

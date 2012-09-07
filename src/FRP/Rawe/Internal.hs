@@ -48,6 +48,8 @@ import Control.Monad.Fix
 import Control.Monad.State
 import Control.Monad.Writer hiding (Product)
 
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IM
 import Data.List
 import Data.String
 import Data.Void
@@ -121,10 +123,10 @@ data HtmlStructure = Tag String [Attribute] [HtmlStructure] -- ^ Tag with conten
 -- | The inner state kept in the HtmlM monad.
 
 data HtmlState = HtmlState
-    { hsUniq :: Int
+    { hsUniq :: IntMap Int
         -- ^ Counter for generating unique values
 
-    , hsBehaviours :: [(Int, String, [RawJS])]
+    , hsBehaviours :: IntMap [(Int, String, [RawJS])]
         -- ^ List of behaviours with their id, name of the JavaScript
         -- constructor and list of parameters passed to it
 
@@ -147,11 +149,14 @@ data HtmlState = HtmlState
     , hsRecursion :: Int
         -- ^ Level of recursion in executing HtmlM monads.
 
+    , hsRecNedded :: Int
+        -- ^ Recursion level needed for used behaviours
+
     , hsInFix :: Bool
         -- ^ Indicates whether we are inside an mfix call
     }
 
-emptyHtmlState = HtmlState 0 [] [] Nothing [] [] 0 False
+emptyHtmlState = HtmlState (IM.singleton 0 0) (IM.singleton 0 []) [] Nothing [] [] 0 0 False
 
 
 -- | The HtmlM monad.
@@ -207,12 +212,16 @@ str = fromString
 -- | Adds a behaviour to the list of behaviours the state of HtmlM.
 
 addBehaviour
-    :: Int      -- ^ ID used for this behaviour
+    :: Int      -- ^ Level of recursion
+    -> Int      -- ^ ID used for this behaviour
     -> String   -- ^ Name of the initialization function
     -> [RawJS]  -- ^ Parameters for the initialization function
     -> HtmlM ()
-addBehaviour id name params =
-    modify $ \s -> s { hsBehaviours = (id, name, params) : hsBehaviours s }
+addBehaviour r id name params =
+    modify $ \s -> s
+        { hsBehaviours = IM.adjust ((id, name, params):) r (hsBehaviours s)
+        , hsRecNedded = max r (hsRecNedded s)
+        }
 
 
 -- | Similar to 'addBehaviour', but generates a unique ID.
@@ -221,7 +230,8 @@ addBehaviourName :: String -> [RawJS] -> HtmlM (Int, Int)
 addBehaviourName name params = do
     bid <- htmlUniq
     r <- gets hsRecursion
-    addBehaviour bid name params
+    addBehaviour r bid name params
+    modify $ \s -> s { hsRecNedded = max r (hsRecNedded s) }
     return (r,bid)
 
 
@@ -232,29 +242,37 @@ assignBehaviour :: BhvFun a b -> HtmlM (Int,Int)
 assignBehaviour b = do
     -- We need to do this so b does not need to be evaluated for internal
     -- unique counter and mfix may work for mutually recursive behaviours.
-    nid <- htmlUniq
+    nids <- htmlUniqs
     r <- gets hsRecursion
 
-    let checkExisting name params = do
-            inFix <- gets hsInFix
-            if inFix
-               then do addBehaviour nid name params
-                       return (r,nid)
+    let checkExisting getCode = do
+            origNeed <- gets hsRecNedded
+            modify $ \s -> s { hsRecNedded = 0 }
+            (name, params) <- getCode
+            need <- gets hsRecNedded
+            modify $ \s -> s { hsRecNedded = max need origNeed }
+            let rneed = min r need
 
-               else do mbid <- return . find (\(_, n, p) -> (n,p)==(name,params)) =<< gets hsBehaviours
+            inFix <- gets hsInFix
+            let nid = nids rneed
+            if inFix
+               then do addBehaviour rneed nid name params
+                       return (rneed,nid)
+
+               else do mbid <- return . find (\(_, n, p) -> (n,p)==(name,params)) . (IM.!rneed) =<< gets hsBehaviours
                        case mbid of
-                            Just (id, _, _) -> return (r,id)
-                            Nothing -> do addBehaviour nid name params
-                                          return (r,nid)
+                            Just (id, _, _) -> return (rneed,id)
+                            Nothing -> do addBehaviour rneed nid name params
+                                          return (rneed,nid)
 
     case b of
-         Prim _ hf -> do
-             (name, params) <- hf
-             checkExisting name params
+         Prim _ hf -> checkExisting hf
+         Composed _ _ -> checkExisting $ (,) "compose" <$> composedList b
 
-         Composed _ _ -> checkExisting "compose" =<< composedList b
+         Assigned _ (r,id) -> do
+             modify $ \s -> s { hsRecNedded = max r (hsRecNedded s) }
+             return (r,id)
 
-         Assigned _ id -> return id
          BhvID -> return (0,0)
 
 
@@ -268,7 +286,21 @@ composedList x = (:[]) <$> bhvValue x
 -- | Generates a unique integer.
 
 htmlUniq :: HtmlM Int
-htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
+htmlUniq = do
+    r <- gets hsRecursion
+    us <- gets hsUniq
+    let x = us IM.! r
+    modify $ \s -> s { hsUniq = IM.insert r (x+1) us }
+    return x
+
+
+-- | Generates unique integer for every recursion level
+
+htmlUniqs :: HtmlM (Int -> Int)
+htmlUniqs = do
+    us <- gets hsUniq
+    modify $ \s -> s { hsUniq = IM.map (+1) us }
+    return (us IM.!)
 
 -- | Creates an environment for a "recursive" call used to list functions
 -- between behaviours. Increments the recursion counter, and resets the unique
@@ -278,9 +310,20 @@ htmlUniq = do { x <- gets hsUniq; modify $ \s -> s { hsUniq = x+1 }; return x }
 htmlLocal :: HtmlM a -> HtmlM a
 htmlLocal action = do
     state <- get
-    put $ emptyHtmlState { hsRecursion = hsRecursion state + 1, hsUniq = (hsRecursion state + 1) * 1000, hsInFix = hsInFix state }
+    let newrec = hsRecursion state + 1
+    put $ emptyHtmlState
+            { hsRecursion = newrec
+            , hsUniq = IM.insert newrec (1000*newrec) (hsUniq state)
+            , hsBehaviours = IM.insert newrec [] (hsBehaviours state)
+            , hsInFix = hsInFix state
+            }
     result <- action
-    put state
+    state' <- get
+    put $ state
+            { hsBehaviours = IM.delete newrec (hsBehaviours state')
+            , hsUniq = IM.delete newrec (hsUniq state')
+            , hsRecNedded = max (hsRecNedded state) (hsRecNedded state')
+            }
     return result
 
 
@@ -550,7 +593,7 @@ bhvValueCommon bv begin f = htmlLocal $ do
     -- behaviour function to our local state, so now, we take them and make
     -- proper JavaScript code from them:
 
-    bs <- gets $ reverse.hsBehaviours
+    bs <- gets $ reverse.(IM.!r).hsBehaviours
     hs <- gets $ reverse.hsHtmlValues
     hbs <- gets $ reverse.hsHtmlBehaviours
     hgs <- gets $ reverse.hsHtmlGens
@@ -686,7 +729,7 @@ instance BhvPrim (BhvConstEval a b) a b where
 
 render :: Html -> IO String
 render html = let (HtmlM f) = renderH html
-                  ((result, ()), _) = f (emptyHtmlState { hsUniq = 1, hsBehaviours = [(0, "id", [])] } )
+                  ((result, ()), _) = f (emptyHtmlState { hsUniq = IM.singleton 0 1, hsBehaviours = IM.singleton 0 [(0, "id", [])] } )
                in return result
 
 
